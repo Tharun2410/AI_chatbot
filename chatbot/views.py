@@ -10,41 +10,49 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def home(request):
     return render(request, 'chatbot/index.html')
-
+ 
 
 def chat(request):
     if request.method == "POST":
-        data = json.loads(request.body)
-        message = data.get("message")
+        try:
+            data = json.loads(request.body)
+            message = data.get("message")
 
-        print("User message:", message)
+            print("User message:", message)
 
-        conversation = request.session.get("conversation", [])
+            conversation = request.session.get("conversation", [])
 
-        conversation.append({
-            "role": "user",
-            "text": message
-        })
+            conversation.append({
+                "role": "user",
+                "text": message
+            })
 
-        prompt = ""
+            prompt = ""
 
-        for item in conversation:
-            prompt += f"{item['role']}: {item['text']}\n"
+            for item in conversation:
+                prompt += f"{item['role']}: {item['text']}\n"
 
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
-        )
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=prompt
+            )
 
-        reply = response.text
+            reply = response.text
 
-        conversation.append({
-            "role": "assistant",
-            "text": reply
-        })
+            conversation.append({
+                "role": "assistant",
+                "text": reply
+            })
 
-        request.session["conversation"] = conversation
+            request.session["conversation"] = conversation
 
-        return JsonResponse({
-            "reply": reply
-        })
+            return JsonResponse({
+                "reply": reply
+            })
+
+        except Exception as e:
+            print("CHAT ERROR:", repr(e))
+            return JsonResponse({
+                "error": str(e)
+            }, status=500)
+

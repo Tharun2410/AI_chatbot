@@ -1,28 +1,171 @@
 {% load static %}
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <title>AI Chatbot</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>THARUN AI</title>
 
     <link rel="stylesheet" href="{% static 'chatbot/style.css' %}">
 </head>
 
 <body>
 
-    {% csrf_token %}
+    <div class="app">
 
-    <div class="chat-container">
-        <h1>My AI Chatbot</h1>
-        
-        <div id="chat-box"></div>
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
 
-        <input type="text" placeholder="Type your message..." id="message">
+            <div class="brand">
+                <div class="brand-icon">✦</div>
+                <div>
+                    <h2>THARUN AI</h2>
+                    <span>AI ASSISTANT</span>
+                </div>
+            </div>
 
-        <button id="send-button">Send</button>
+            <button class="new-chat">
+                <span>＋</span>
+                New Chat
+            </button>
+
+            <div class="recent-section">
+
+                <p class="section-title">RECENT CHATS</p>
+
+                <div class="chat-history">
+                    <button>💬 Python Help</button>
+                    <button>💬 Django Project</button>
+                    <button>💬 Interview Prep</button>
+                </div>
+
+            </div>
+
+            <div class="sidebar-bottom">
+
+                <div class="status">
+                    <span class="status-dot"></span>
+                    <span>AI Online</span>
+                </div>
+
+            </div>
+
+        </aside>
+
+
+        <!-- MAIN CHAT -->
+        <main class="main">
+
+            <!-- HEADER -->
+            <header class="topbar">
+
+                <div class="assistant-info">
+
+                    <div class="ai-avatar">
+                        ✦
+                    </div>
+
+                    <div>
+                        <h3>THARUN AI</h3>
+                        <p>
+                            <span class="online-dot"></span>
+                            Online
+                        </p>
+                    </div>
+
+                </div>
+
+                <button class="menu-button">
+                    ⋮
+                </button>
+
+            </header>
+
+
+            <!-- CHAT AREA -->
+            <section id="chat-box" class="chat-area">
+
+                <!-- WELCOME SCREEN -->
+                <div class="welcome">
+
+                    <div class="welcome-icon">
+                        ✦
+                    </div>
+
+                    <h1>
+                        How can I help you?
+                    </h1>
+
+                    <p>
+                        Ask me anything. I'm ready to help you
+                        learn, build and solve problems.
+                    </p>
+
+                    <div class="suggestions">
+
+                        <button>
+                            <span>💡</span>
+                            Explain Python
+                        </button>
+
+                        <button>
+                            <span>⚡</span>
+                            Help with Django
+                        </button>
+
+                        <button>
+                            <span>💻</span>
+                            Practice coding
+                        </button>
+
+                        <button>
+                            <span>🎯</span>
+                            Prepare for interview
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- INPUT AREA -->
+            <div class="input-area">
+
+                <div class="input-wrapper">
+
+                    {% csrf_token %}
+
+                    <input
+                        type="text"
+                        id="message"
+                        placeholder="Ask THARUN AI anything..."
+                        autocomplete="off"
+                    >
+
+                    <button id="send-button">
+                        <span>➤</span>
+                    </button>
+
+                </div>
+
+                <p class="disclaimer">
+                    THARUN AI can make mistakes. Check important information.
+                </p>
+
+            </div>
+
+        </main>
+
     </div>
+
 
     <script src="{% static 'chatbot/script.js' %}"></script>
 
 </body>
+
 </html>

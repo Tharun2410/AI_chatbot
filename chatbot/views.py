@@ -29,17 +29,43 @@ def chat(request):
 
         print("User message:", message)
 
+        # Get previous conversation
+        conversation = request.session.get("conversation", [])
+
+        # Add user's message
+        conversation.append({
+            "role": "user",
+            "text": message
+        })
+
+        # Create prompt from conversation
+        prompt = ""
+
+        for item in conversation:
+            prompt += f"{item['role']}: {item['text']}\n"
+
+        # Ask Gemini
         response = client.models.generate_content(
             model="gemini-3.5-flash-lite",
-            contents=message
+            contents=prompt
         )
 
         reply = response.text
 
+        # Save AI response
+        conversation.append({
+            "role": "assistant",
+            "text": reply
+        })
+
+        # Save conversation in session
+        request.session["conversation"] = conversation
+        request.session.modified = True
+
         return JsonResponse({
             "reply": reply
         })
-        
+
     except Exception as e:
         print("CHAT ERROR:", repr(e))
 

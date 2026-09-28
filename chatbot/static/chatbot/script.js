@@ -40,11 +40,15 @@ sendButton.addEventListener("click", async function () {
 
         const data = await response.json();
 
-        // Check for backend error
-        if (!response.ok) {
-            throw new Error(data.error || "Something went wrong");
-        }
+if (!response.ok) {
+    chatBox.innerHTML += `
+        <div class="message bot">
+            <p>${data.error || "AI service is temporarily unavailable. Please try again later."}</p>
+        </div>
+    `;
 
+    return;
+}
         // Show bot's reply
         chatBox.innerHTML += `
             <div class="message bot">

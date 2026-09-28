@@ -1,17 +1,3 @@
-from django.shortcuts import render
-from django.http import JsonResponse
-import json
-import os
-from google import genai
-
-
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-
-def home(request):
-    return render(request, 'chatbot/index.html')
- 
-
 def chat(request):
     if request.method == "POST":
         try:
@@ -52,7 +38,7 @@ def chat(request):
 
         except Exception as e:
             print("CHAT ERROR:", repr(e))
-            return JsonResponse({
-                "error": str(e)
-            }, status=500)
 
+            return JsonResponse({
+                "error": "AI service is temporarily unavailable. Please try again later."
+            }, status=503)

@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 import json
 import os
+import time
 from google import genai
 
 
@@ -12,13 +13,42 @@ def home(request):
     return render(request, "chatbot/index.html")
 
 
+def generate_with_retry(prompt):
+    delays = [2, 4, 8]
+
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.5-flash-lite",
+                contents=prompt
+            )
+
+            return response
+
+        except Exception as e:
+
+            print(f"Gemini attempt {attempt + 1} failed:", repr(e))
+
+            # Retry only for temporary 503 errors
+            if "503" not in str(e):
+                raise
+
+            if attempt < 2:
+                print(f"Retrying in {delays[attempt]} seconds...")
+                time.sleep(delays[attempt])
+            else:
+                raise
+
+
 def chat(request):
+
     if request.method != "POST":
         return JsonResponse({
             "error": "Only POST requests are allowed."
         }, status=405)
 
     try:
+
         data = json.loads(request.body)
         message = data.get("message", "").strip()
 
@@ -44,11 +74,8 @@ def chat(request):
         for item in conversation:
             prompt += f"{item['role']}: {item['text']}\n"
 
-        # Ask Gemini
-        response = client.models.generate_content(
-            model="gemini-3.5-flash-lite",
-            contents=prompt
-        )
+        # Ask Gemini with automatic retry
+        response = generate_with_retry(prompt)
 
         reply = response.text
 
@@ -67,6 +94,7 @@ def chat(request):
         })
 
     except Exception as e:
+
         print("CHAT ERROR:", repr(e))
 
         return JsonResponse({

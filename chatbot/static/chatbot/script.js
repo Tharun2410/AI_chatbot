@@ -9,6 +9,7 @@ sendButton.addEventListener("click", sendMessage);
 messageInput.addEventListener("keydown", function (event) {
 
     if (event.key === "Enter") {
+        event.preventDefault();
         sendMessage();
     }
 
@@ -25,17 +26,33 @@ async function sendMessage() {
     }
 
 
-    const csrfToken = document.querySelector(
+    const csrfElement = document.querySelector(
         '[name=csrfmiddlewaretoken]'
-    ).value;
+    );
 
 
-    // Show user's message
-    chatBox.innerHTML += `
-        <div class="message user">
-            <p>${escapeHtml(message)}</p>
-        </div>
-    `;
+    if (!csrfElement) {
+
+        console.error(
+            "CSRF token not found."
+        );
+
+        addBotMessage(
+            "Something went wrong. Please refresh the page."
+        );
+
+        return;
+    }
+
+
+    const csrfToken = csrfElement.value;
+
+
+    // -------------------------------
+    // Show user message
+    // -------------------------------
+
+    addUserMessage(message);
 
 
     messageInput.value = "";
@@ -45,86 +62,118 @@ async function sendMessage() {
 
     try {
 
-        const response = await fetch("/chat/", {
+        const response = await fetch(
+            "/chat/",
+            {
+                method: "POST",
 
-            method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
 
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": csrfToken
-            },
+                    "X-CSRFToken":
+                        csrfToken
+                },
 
-            body: JSON.stringify({
-                message: message
-            })
+                body: JSON.stringify({
+                    message: message
+                })
+            }
+        );
 
-        });
+
+        // --------------------------------
+        // Read server response safely
+        // --------------------------------
+
+        const responseText =
+            await response.text();
 
 
-        // Safely read response
-        const text = await response.text();
+        console.log(
+            "Server response:",
+            responseText
+        );
 
 
         let data;
 
+
         try {
 
-            data = JSON.parse(text);
+            data = JSON.parse(
+                responseText
+            );
 
-        } catch (error) {
+        } catch (jsonError) {
 
             console.error(
-                "Invalid server response:",
-                text
+                "JSON parsing error:",
+                jsonError
             );
 
-            throw new Error(
-                "Server returned an invalid response."
+            console.error(
+                "Raw response:",
+                responseText
             );
-        }
 
-
-        // Server returned an error
-        if (!response.ok) {
-
-            chatBox.innerHTML += `
-                <div class="message bot">
-                    <p>${escapeHtml(
-                        data.error ||
-                        "AI service is temporarily unavailable."
-                    )}</p>
-                </div>
-            `;
+            addBotMessage(
+                "The server returned an unexpected response. Please try again."
+            );
 
             return;
         }
 
 
-        // Show AI response
-        chatBox.innerHTML += `
-            <div class="message bot">
-                <p>${escapeHtml(data.reply)}</p>
-            </div>
-        `;
+        // --------------------------------
+        // Server error
+        // --------------------------------
+
+        if (!response.ok) {
+
+            addBotMessage(
+                data.error ||
+                "AI service is temporarily unavailable."
+            );
+
+            return;
+        }
 
 
-        // Scroll to bottom
-        chatBox.scrollTop = chatBox.scrollHeight;
+        // --------------------------------
+        // Successful AI response
+        // --------------------------------
+
+        if (
+            data.reply === undefined ||
+            data.reply === null
+        ) {
+
+            addBotMessage(
+                "The AI returned an empty response. Please try again."
+            );
+
+            return;
+        }
+
+
+        addBotMessage(
+            data.reply
+        );
 
 
     } catch (error) {
 
         console.error(
-            "Chat error:",
+            "Chat request error:",
             error
         );
 
 
-        chatBox.innerHTML += `
-            <div class="message bot">
-                <p>Something went wrong. Please try again.</p>
-            </div>
-        `;
+        addBotMessage(
+            "Unable to connect to the AI service. Please try again."
+        );
+
 
     } finally {
 
@@ -137,14 +186,80 @@ async function sendMessage() {
 }
 
 
-/*
-    Prevent HTML injection
-*/
-function escapeHtml(text) {
+// =====================================
+// ADD USER MESSAGE
+// =====================================
 
-    const div = document.createElement("div");
+function addUserMessage(message) {
 
-    div.textContent = text;
+    const messageDiv =
+        document.createElement("div");
 
-    return div.innerHTML;
+    messageDiv.className =
+        "message user";
+
+
+    const paragraph =
+        document.createElement("p");
+
+    paragraph.textContent =
+        message;
+
+
+    messageDiv.appendChild(
+        paragraph
+    );
+
+
+    chatBox.appendChild(
+        messageDiv
+    );
+
+
+    scrollChatToBottom();
+}
+
+
+// =====================================
+// ADD BOT MESSAGE
+// =====================================
+
+function addBotMessage(message) {
+
+    const messageDiv =
+        document.createElement("div");
+
+    messageDiv.className =
+        "message bot";
+
+
+    const paragraph =
+        document.createElement("p");
+
+    paragraph.textContent =
+        message;
+
+
+    messageDiv.appendChild(
+        paragraph
+    );
+
+
+    chatBox.appendChild(
+        messageDiv
+    );
+
+
+    scrollChatToBottom();
+}
+
+
+// =====================================
+// SCROLL CHAT
+// =====================================
+
+function scrollChatToBottom() {
+
+    chatBox.scrollTop =
+        chatBox.scrollHeight;
 }

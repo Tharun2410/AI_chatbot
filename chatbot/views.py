@@ -8,122 +8,182 @@ import time
 from google import genai
 
 
-# -----------------------------------------
-# Gemini Client
-# -----------------------------------------
+# ==========================================
+# GEMINI CLIENT
+# ==========================================
 
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
 
-# -----------------------------------------
-# Home Page
-# -----------------------------------------
+# ==========================================
+# HOME PAGE
+# ==========================================
 
 def home(request):
-    return render(request, "chatbot/index.html")
-
-
-# -----------------------------------------
-# Gemini Response
-# -----------------------------------------
-
-def generate_ai_response(prompt):
-
-    # Primary model first
-    # Fallback model second
-    models = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-    ]
-
-    for model in models:
-
-        for attempt in range(2):
-
-            try:
-
-                print(
-                    f"Trying {model} "
-                    f"(attempt {attempt + 1})"
-                )
-
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
-
-                print(
-                    f"SUCCESS: {model}"
-                )
-
-                return response.text
-
-            except Exception as e:
-
-                error_text = str(e)
-
-                print(
-                    f"ERROR from {model}: "
-                    f"{repr(e)}"
-                )
-
-                # Only retry temporary server errors
-                if "503" in error_text:
-
-                    if attempt == 0:
-
-                        print(
-                            f"{model} returned 503. "
-                            f"Retrying after 2 seconds..."
-                        )
-
-                        time.sleep(2)
-
-                        continue
-
-                    else:
-
-                        print(
-                            f"{model} failed twice. "
-                            f"Moving to next model..."
-                        )
-
-                        break
-
-                # Do not retry other errors
-                raise
-
-    # Both models failed
-    raise Exception(
-        "All Gemini models are temporarily unavailable."
+    return render(
+        request,
+        "chatbot/index.html"
     )
 
 
-# -----------------------------------------
-# Chat API
-# -----------------------------------------
+# ==========================================
+# GEMINI AI FUNCTION
+# ==========================================
+
+def generate_ai_response(prompt):
+
+    # Use the model that is currently
+    # responding successfully first.
+    primary_model = "gemini-3.1-flash-lite"
+
+    # Backup model
+    fallback_model = "gemini-3.5-flash-lite"
+
+
+    # --------------------------------------
+    # Try primary model
+    # --------------------------------------
+
+    try:
+
+        print(
+            "Trying primary model:",
+            primary_model
+        )
+
+        response = client.models.generate_content(
+            model=primary_model,
+            contents=prompt
+        )
+
+        print(
+            "SUCCESS:",
+            primary_model
+        )
+
+        return response.text
+
+
+    except Exception as e:
+
+        error_text = str(e)
+
+        print(
+            "PRIMARY MODEL ERROR:",
+            repr(e)
+        )
+
+
+        # ----------------------------------
+        # Only fallback for 503
+        # ----------------------------------
+
+        if "503" not in error_text:
+            raise
+
+
+        print(
+            "Primary model returned 503."
+        )
+
+        print(
+            "Trying fallback model:",
+            fallback_model
+        )
+
+
+    # --------------------------------------
+    # Try fallback model
+    # --------------------------------------
+
+    for attempt in range(2):
+
+        try:
+
+            print(
+                f"Trying fallback model "
+                f"(attempt {attempt + 1})"
+            )
+
+            response = client.models.generate_content(
+                model=fallback_model,
+                contents=prompt
+            )
+
+            print(
+                "SUCCESS:",
+                fallback_model
+            )
+
+            return response.text
+
+
+        except Exception as e:
+
+            error_text = str(e)
+
+            print(
+                "FALLBACK MODEL ERROR:",
+                repr(e)
+            )
+
+
+            # Retry only 503
+            if "503" not in error_text:
+                raise
+
+
+            if attempt == 0:
+
+                print(
+                    "Retrying fallback model "
+                    "after 2 seconds..."
+                )
+
+                time.sleep(2)
+
+
+    # --------------------------------------
+    # Both models unavailable
+    # --------------------------------------
+
+    raise Exception(
+        "Both Gemini models are temporarily unavailable."
+    )
+
+
+# ==========================================
+# CHAT API
+# ==========================================
 
 def chat(request):
 
-    # Only POST is allowed
+    # --------------------------------------
+    # POST only
+    # --------------------------------------
+
     if request.method != "POST":
 
         return JsonResponse(
             {
-                "error": "Only POST requests are allowed."
+                "error":
+                "Only POST requests are allowed."
             },
             status=405
         )
 
+
     try:
 
-        # ---------------------------------
-        # Read user message
-        # ---------------------------------
+        # ----------------------------------
+        # Read request
+        # ----------------------------------
 
-        data = json.loads(request.body)
+        data = json.loads(
+            request.body
+        )
 
         message = data.get(
             "message",
@@ -131,15 +191,16 @@ def chat(request):
         ).strip()
 
 
-        # ---------------------------------
-        # Empty message check
-        # ---------------------------------
+        # ----------------------------------
+        # Empty message
+        # ----------------------------------
 
         if not message:
 
             return JsonResponse(
                 {
-                    "error": "Please enter a message."
+                    "error":
+                    "Please enter a message."
                 },
                 status=400
             )
@@ -151,9 +212,9 @@ def chat(request):
         )
 
 
-        # ---------------------------------
-        # Get conversation from session
-        # ---------------------------------
+        # ----------------------------------
+        # Get conversation
+        # ----------------------------------
 
         conversation = request.session.get(
             "conversation",
@@ -161,9 +222,9 @@ def chat(request):
         )
 
 
-        # ---------------------------------
-        # Add current user message
-        # ---------------------------------
+        # ----------------------------------
+        # Add user message
+        # ----------------------------------
 
         conversation.append(
             {
@@ -173,63 +234,65 @@ def chat(request):
         )
 
 
-        # ---------------------------------
-        # Keep conversation size reasonable
-        # ---------------------------------
+        # ----------------------------------
+        # Keep last 20 messages
+        # ----------------------------------
 
-        # Keep the latest 20 messages
         conversation = conversation[-20:]
 
 
-        # ---------------------------------
-        # Build Gemini prompt
-        # ---------------------------------
+        # ----------------------------------
+        # Build prompt
+        # ----------------------------------
 
         prompt = """
-You are Tharun AI, a helpful and friendly chatbot.
+You are Tharun AI, a helpful, friendly,
+and intelligent chatbot.
 
-Remember information the user tells you during this conversation.
+Remember information that the user tells
+you during the conversation.
 
 Answer naturally and clearly.
 
-Conversation:
+Conversation history:
 
 """
 
 
         for item in conversation:
 
-            role = item["role"]
-            text = item["text"]
-
-            if role == "user":
+            if item["role"] == "user":
 
                 prompt += (
-                    f"User: {text}\n"
+                    "User: "
+                    + item["text"]
+                    + "\n"
                 )
 
             else:
 
                 prompt += (
-                    f"Assistant: {text}\n"
+                    "Assistant: "
+                    + item["text"]
+                    + "\n"
                 )
 
 
         prompt += "\nAssistant:"
 
 
-        # ---------------------------------
-        # Ask Gemini
-        # ---------------------------------
+        # ----------------------------------
+        # Generate AI response
+        # ----------------------------------
 
         reply = generate_ai_response(
             prompt
         )
 
 
-        # ---------------------------------
+        # ----------------------------------
         # Save AI response
-        # ---------------------------------
+        # ----------------------------------
 
         conversation.append(
             {
@@ -239,13 +302,13 @@ Conversation:
         )
 
 
-        # Keep only latest 20 messages
+        # Keep last 20 messages
         conversation = conversation[-20:]
 
 
-        # ---------------------------------
-        # Save conversation in session
-        # ---------------------------------
+        # ----------------------------------
+        # Save session
+        # ----------------------------------
 
         request.session[
             "conversation"
@@ -254,9 +317,9 @@ Conversation:
         request.session.modified = True
 
 
-        # ---------------------------------
-        # Send response to JavaScript
-        # ---------------------------------
+        # ----------------------------------
+        # Return JSON
+        # ----------------------------------
 
         return JsonResponse(
             {
@@ -265,15 +328,24 @@ Conversation:
         )
 
 
+    # ======================================
+    # INVALID JSON
+    # ======================================
+
     except json.JSONDecodeError:
 
         return JsonResponse(
             {
-                "error": "Invalid request."
+                "error":
+                "Invalid request."
             },
             status=400
         )
 
+
+    # ======================================
+    # ANY OTHER ERROR
+    # ======================================
 
     except Exception as e:
 
@@ -284,10 +356,9 @@ Conversation:
 
         return JsonResponse(
             {
-                "error": (
-                    "AI service is temporarily busy. "
-                    "Please try again in a few seconds."
-                )
+                "error":
+                "AI service is temporarily busy. "
+                "Please try again in a few seconds."
             },
             status=503
         )

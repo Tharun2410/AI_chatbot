@@ -1,59 +1,83 @@
-const messageInput = document.getElementById("message");
-const sendButton = document.getElementById("send-button");
-const chatBox = document.getElementById("chat-box");
+const messageInput =
+    document.getElementById("message");
+
+const sendButton =
+    document.getElementById("send-button");
+
+const chatBox =
+    document.getElementById("chat-box");
 
 
-sendButton.addEventListener("click", sendMessage);
+// =================================
+// SEND BUTTON
+// =================================
+
+sendButton.addEventListener(
+    "click",
+    sendMessage
+);
 
 
-messageInput.addEventListener("keydown", function (event) {
+// =================================
+// ENTER KEY
+// =================================
 
-    if (event.key === "Enter") {
-        event.preventDefault();
-        sendMessage();
+messageInput.addEventListener(
+    "keydown",
+    function (event) {
+
+        if (event.key === "Enter") {
+
+            event.preventDefault();
+
+            sendMessage();
+        }
     }
+);
 
-});
 
+// =================================
+// SEND MESSAGE
+// =================================
 
 async function sendMessage() {
 
-    const message = messageInput.value.trim();
-
+    const message =
+        messageInput.value.trim();
 
     if (!message) {
         return;
     }
 
 
-    const csrfElement = document.querySelector(
-        '[name=csrfmiddlewaretoken]'
-    );
+    // -----------------------------
+    // CSRF TOKEN
+    // -----------------------------
 
+    const csrfElement =
+        document.querySelector(
+            '[name=csrfmiddlewaretoken]'
+        );
 
     if (!csrfElement) {
 
-        console.error(
-            "CSRF token not found."
-        );
-
         addBotMessage(
-            "Something went wrong. Please refresh the page."
+            "Security token not found. Please refresh the page."
         );
 
         return;
     }
 
 
-    const csrfToken = csrfElement.value;
+    const csrfToken =
+        csrfElement.value;
 
 
-    // -------------------------------
+    // -----------------------------
     // Show user message
-    // -------------------------------
+    // -----------------------------
 
     addUserMessage(message);
-
 
     messageInput.value = "";
 
@@ -62,91 +86,96 @@ async function sendMessage() {
 
     try {
 
-        const response = await fetch(
-            "/chat/",
-            {
-                method: "POST",
+        const response =
+            await fetch(
+                "/chat/",
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type":
-                        "application/json",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
 
-                    "X-CSRFToken":
-                        csrfToken
-                },
+                        "X-CSRFToken":
+                            csrfToken
+                    },
 
-                body: JSON.stringify({
-                    message: message
-                })
-            }
-        );
+                    body:
+                        JSON.stringify({
+                            message: message
+                        })
+                }
+            );
 
 
-        // --------------------------------
-        // Read server response safely
-        // --------------------------------
+        // -------------------------
+        // Read response
+        // -------------------------
 
         const responseText =
             await response.text();
 
+        console.log(
+            "Chat API status:",
+            response.status
+        );
 
         console.log(
-            "Server response:",
+            "Chat API response:",
             responseText
         );
 
 
-        let data;
+        // -------------------------
+        // Parse JSON
+        // -------------------------
 
+        let data;
 
         try {
 
-            data = JSON.parse(
-                responseText
-            );
+            data =
+                JSON.parse(
+                    responseText
+                );
 
-        } catch (jsonError) {
-
-            console.error(
-                "JSON parsing error:",
-                jsonError
-            );
+        } catch (error) {
 
             console.error(
-                "Raw response:",
-                responseText
+                "Invalid JSON:",
+                error
             );
 
             addBotMessage(
-                "The server returned an unexpected response. Please try again."
+                "The server returned an invalid response. Please try again."
             );
 
             return;
         }
 
 
-        // --------------------------------
+        // -------------------------
         // Server error
-        // --------------------------------
+        // -------------------------
 
         if (!response.ok) {
 
             addBotMessage(
                 data.error ||
-                "AI service is temporarily unavailable."
+                "The AI service is temporarily unavailable."
             );
 
             return;
         }
 
 
-        // --------------------------------
-        // Successful AI response
-        // --------------------------------
+        // -------------------------
+        // Empty AI response
+        // -------------------------
 
         if (
-            data.reply === undefined ||
-            data.reply === null
+            !data.reply ||
+            !data.reply.trim()
         ) {
 
             addBotMessage(
@@ -157,50 +186,66 @@ async function sendMessage() {
         }
 
 
+        // -------------------------
+        // Show AI response
+        // -------------------------
+
         addBotMessage(
             data.reply
         );
 
+    }
 
-    } catch (error) {
+
+    // -----------------------------
+    // Network error
+    // -----------------------------
+
+    catch (error) {
 
         console.error(
-            "Chat request error:",
+            "Chat request failed:",
             error
         );
 
-
         addBotMessage(
-            "Unable to connect to the AI service. Please try again."
+            "Unable to connect to the chatbot server. Please check your connection."
         );
+    }
 
 
-    } finally {
+    // -----------------------------
+    // Enable button
+    // -----------------------------
+
+    finally {
 
         sendButton.disabled = false;
 
         messageInput.focus();
-
     }
-
 }
 
 
-// =====================================
-// ADD USER MESSAGE
-// =====================================
+// =================================
+// USER MESSAGE
+// =================================
 
 function addUserMessage(message) {
 
     const messageDiv =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
     messageDiv.className =
         "message user";
 
 
     const paragraph =
-        document.createElement("p");
+        document.createElement(
+            "p"
+        );
 
     paragraph.textContent =
         message;
@@ -220,21 +265,25 @@ function addUserMessage(message) {
 }
 
 
-// =====================================
-// ADD BOT MESSAGE
-// =====================================
+// =================================
+// BOT MESSAGE
+// =================================
 
 function addBotMessage(message) {
 
     const messageDiv =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
     messageDiv.className =
         "message bot";
 
 
     const paragraph =
-        document.createElement("p");
+        document.createElement(
+            "p"
+        );
 
     paragraph.textContent =
         message;
@@ -254,9 +303,9 @@ function addBotMessage(message) {
 }
 
 
-// =====================================
-// SCROLL CHAT
-// =====================================
+// =================================
+// SCROLL
+// =================================
 
 function scrollChatToBottom() {
 

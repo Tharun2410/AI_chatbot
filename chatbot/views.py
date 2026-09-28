@@ -15,8 +15,13 @@ from google.genai import types
 
 MODELS = [
     "gemini-3.1-flash-lite",   # primary
-    "gemini-3.5-flash-lite",   # fallback
+    "gemini-3.5-flash-lite",   # fallback 1
+    "gemini-3.8-flash",        # fallback 2 (skipped if quota is used up)
 ]
+
+MAX_ATTEMPTS_PER_MODEL = 3
+RETRY_WAITS = [1.5, 3]     # seconds to wait before attempt 2 and 3
+TOTAL_TIME_LIMIT = 40      # stop trying after 40 seconds in total
 
 MAX_MESSAGE_LENGTH = 2000
 
@@ -71,11 +76,23 @@ def is_timeout(error):
 
 def generate_ai_response(prompt):
 
-    last_kind = "busy"
+    start = time.monotonic()
+    seen = set()   # kinds of failures we ran into
+
+    def fail():
+        # Report "busy" first, because that is the most useful message
+        for kind in ("busy", "quota", "empty", "other"):
+            if kind in seen:
+                raise AIServiceError(kind)
+        raise AIServiceError("busy")
 
     for model in MODELS:
 
-        for attempt in range(2):
+        for attempt in range(MAX_ATTEMPTS_PER_MODEL):
+
+            if time.monotonic() - start > TOTAL_TIME_LIMIT:
+                print("Time limit reached, giving up.")
+                fail()
 
             try:
                 print(f"Trying {model} (attempt {attempt + 1})")
@@ -91,33 +108,32 @@ def generate_ai_response(prompt):
                     print("SUCCESS:", model)
                     return text.strip()
 
-                # Gemini answered but gave no text
                 print("EMPTY RESPONSE from", model)
-                last_kind = "empty"
-                break  # go to next model
+                seen.add("empty")
+                break  # next model
 
             except Exception as e:
 
                 code = get_error_code(e)
                 print(f"ERROR from {model}: code={code} error={e!r}")
 
-                # Quota problem: retrying the same model is pointless
+                # Quota used up: retrying this model is pointless
                 if code == 429:
-                    last_kind = "quota"
+                    seen.add("quota")
                     break
 
-                # Temporary problem: retry once, then next model
+                # Temporary problem: wait a bit longer each time, then retry
                 if code in (500, 503, 504) or is_timeout(e):
-                    last_kind = "busy"
-                    if attempt == 0:
-                        time.sleep(1)
+                    seen.add("busy")
+                    if attempt < MAX_ATTEMPTS_PER_MODEL - 1:
+                        time.sleep(RETRY_WAITS[attempt])
                     continue
 
-                # Anything else (bad model name, bad key...): next model
-                last_kind = "other"
+                # Anything else (wrong model name, etc.): next model
+                seen.add("other")
                 break
 
-    raise AIServiceError(last_kind)
+    fail()
 
 
 # ==========================================

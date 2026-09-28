@@ -2,30 +2,51 @@ const messageInput = document.getElementById("message");
 const sendButton = document.getElementById("send-button");
 const chatBox = document.getElementById("chat-box");
 
-sendButton.addEventListener("click", async function () {
+
+sendButton.addEventListener("click", sendMessage);
+
+
+messageInput.addEventListener("keydown", function (event) {
+
+    if (event.key === "Enter") {
+        sendMessage();
+    }
+
+});
+
+
+async function sendMessage() {
 
     const message = messageInput.value.trim();
+
 
     if (!message) {
         return;
     }
 
+
     const csrfToken = document.querySelector(
         '[name=csrfmiddlewaretoken]'
     ).value;
 
+
     // Show user's message
     chatBox.innerHTML += `
         <div class="message user">
-            <p>${message}</p>
+            <p>${escapeHtml(message)}</p>
         </div>
     `;
 
+
     messageInput.value = "";
+
+    sendButton.disabled = true;
+
 
     try {
 
         const response = await fetch("/chat/", {
+
             method: "POST",
 
             headers: {
@@ -36,35 +57,94 @@ sendButton.addEventListener("click", async function () {
             body: JSON.stringify({
                 message: message
             })
+
         });
 
-        const data = await response.json();
 
-if (!response.ok) {
-    chatBox.innerHTML += `
-        <div class="message bot">
-            <p>${data.error || "AI service is temporarily unavailable. Please try again later."}</p>
-        </div>
-    `;
+        // Safely read response
+        const text = await response.text();
 
-    return;
-}
-        // Show bot's reply
+
+        let data;
+
+        try {
+
+            data = JSON.parse(text);
+
+        } catch (error) {
+
+            console.error(
+                "Invalid server response:",
+                text
+            );
+
+            throw new Error(
+                "Server returned an invalid response."
+            );
+        }
+
+
+        // Server returned an error
+        if (!response.ok) {
+
+            chatBox.innerHTML += `
+                <div class="message bot">
+                    <p>${escapeHtml(
+                        data.error ||
+                        "AI service is temporarily unavailable."
+                    )}</p>
+                </div>
+            `;
+
+            return;
+        }
+
+
+        // Show AI response
         chatBox.innerHTML += `
             <div class="message bot">
-                <p>${data.reply}</p>
+                <p>${escapeHtml(data.reply)}</p>
             </div>
         `;
+
+
+        // Scroll to bottom
+        chatBox.scrollTop = chatBox.scrollHeight;
+
 
     } catch (error) {
 
-        console.error("Chat error:", error);
+        console.error(
+            "Chat error:",
+            error
+        );
+
 
         chatBox.innerHTML += `
             <div class="message bot">
-                <p>Sorry, something went wrong: ${error.message}</p>
+                <p>Something went wrong. Please try again.</p>
             </div>
         `;
+
+    } finally {
+
+        sendButton.disabled = false;
+
+        messageInput.focus();
+
     }
 
-});
+}
+
+
+/*
+    Prevent HTML injection
+*/
+function escapeHtml(text) {
+
+    const div = document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+}

@@ -7,6 +7,27 @@ const sendButton =
 const chatBox =
     document.getElementById("chat-box");
 
+const welcomeScreen =
+    document.getElementById("welcome-screen");
+
+const newChatButton =
+    document.getElementById("new-chat-button");
+
+const menuButton =
+    document.getElementById("menu-button");
+
+const menuDropdown =
+    document.getElementById("menu-dropdown");
+
+const clearChatButton =
+    document.getElementById("clear-chat");
+
+const focusInputButton =
+    document.getElementById("focus-input");
+
+const statusText =
+    document.getElementById("connection-status");
+
 
 // =================================
 // SEND BUTTON
@@ -26,12 +47,176 @@ messageInput.addEventListener(
     "keydown",
     function (event) {
 
-        if (event.key === "Enter") {
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey
+        ) {
 
             event.preventDefault();
 
             sendMessage();
         }
+    }
+);
+
+
+// =================================
+// SUGGESTION CARDS
+// =================================
+
+document
+    .querySelectorAll(".suggestion-card")
+    .forEach(button => {
+
+        button.addEventListener(
+            "click",
+            function () {
+
+                const prompt =
+                    this.dataset.prompt;
+
+                messageInput.value =
+                    prompt;
+
+                sendMessage();
+            }
+        );
+
+    });
+
+
+// =================================
+// RECENT CHAT BUTTONS
+// =================================
+
+document
+    .querySelectorAll(".history-item")
+    .forEach(button => {
+
+        button.addEventListener(
+            "click",
+            function () {
+
+                const prompt =
+                    this.dataset.prompt;
+
+                messageInput.value =
+                    prompt;
+
+                messageInput.focus();
+            }
+        );
+
+    });
+
+
+// =================================
+// NEW CHAT
+// =================================
+
+newChatButton.addEventListener(
+    "click",
+    function () {
+
+        const messages =
+            chatBox.querySelectorAll(
+                ".message"
+            );
+
+        messages.forEach(
+            message => message.remove()
+        );
+
+        welcomeScreen.style.display =
+            "block";
+
+        messageInput.value = "";
+
+        messageInput.focus();
+
+        closeMenu();
+    }
+);
+
+
+// =================================
+// MENU
+// =================================
+
+menuButton.addEventListener(
+    "click",
+    function (event) {
+
+        event.stopPropagation();
+
+        menuDropdown.classList.toggle(
+            "show"
+        );
+    }
+);
+
+
+document.addEventListener(
+    "click",
+    function (event) {
+
+        if (
+            !menuDropdown.contains(event.target) &&
+            event.target !== menuButton
+        ) {
+
+            closeMenu();
+        }
+    }
+);
+
+
+function closeMenu() {
+
+    menuDropdown.classList.remove(
+        "show"
+    );
+}
+
+
+// =================================
+// CLEAR CHAT
+// =================================
+
+clearChatButton.addEventListener(
+    "click",
+    function () {
+
+        const messages =
+            chatBox.querySelectorAll(
+                ".message"
+            );
+
+        messages.forEach(
+            message => message.remove()
+        );
+
+        welcomeScreen.style.display =
+            "block";
+
+        closeMenu();
+
+        messageInput.focus();
+    }
+);
+
+
+// =================================
+// FOCUS INPUT
+// =================================
+
+focusInputButton.addEventListener(
+    "click",
+    function () {
+
+        messageInput.focus();
+
+        closeMenu();
     }
 );
 
@@ -45,19 +230,19 @@ async function sendMessage() {
     const message =
         messageInput.value.trim();
 
-    if (!message) {
+    if (
+        !message ||
+        sendButton.disabled
+    ) {
         return;
     }
 
-
-    // -----------------------------
-    // CSRF TOKEN
-    // -----------------------------
 
     const csrfElement =
         document.querySelector(
             '[name=csrfmiddlewaretoken]'
         );
+
 
     if (!csrfElement) {
 
@@ -73,15 +258,32 @@ async function sendMessage() {
         csrfElement.value;
 
 
-    // -----------------------------
-    // Show user message
-    // -----------------------------
+    // Remove welcome screen
+    // after first message.
 
-    addUserMessage(message);
+    if (welcomeScreen) {
+
+        welcomeScreen.style.display =
+            "none";
+    }
+
+
+    // Show user message
+
+    addUserMessage(
+        message
+    );
+
 
     messageInput.value = "";
 
-    sendButton.disabled = true;
+    setLoading(true);
+
+
+    // Show typing indicator
+
+    const typing =
+        addTypingIndicator();
 
 
     try {
@@ -102,35 +304,25 @@ async function sendMessage() {
 
                     body:
                         JSON.stringify({
-                            message: message
+                            message:
+                                message
                         })
                 }
             );
 
 
-        // -------------------------
-        // Read response
-        // -------------------------
-
         const responseText =
             await response.text();
+
 
         console.log(
             "Chat API status:",
             response.status
         );
 
-        console.log(
-            "Chat API response:",
-            responseText
-        );
-
-
-        // -------------------------
-        // Parse JSON
-        // -------------------------
 
         let data;
+
 
         try {
 
@@ -146,6 +338,10 @@ async function sendMessage() {
                 error
             );
 
+            removeTypingIndicator(
+                typing
+            );
+
             addBotMessage(
                 "The server returned an invalid response. Please try again."
             );
@@ -154,9 +350,10 @@ async function sendMessage() {
         }
 
 
-        // -------------------------
-        // Server error
-        // -------------------------
+        removeTypingIndicator(
+            typing
+        );
+
 
         if (!response.ok) {
 
@@ -165,13 +362,13 @@ async function sendMessage() {
                 "The AI service is temporarily unavailable."
             );
 
+            setConnectionStatus(
+                "Busy"
+            );
+
             return;
         }
 
-
-        // -------------------------
-        // Empty AI response
-        // -------------------------
 
         if (
             !data.reply ||
@@ -186,9 +383,10 @@ async function sendMessage() {
         }
 
 
-        // -------------------------
-        // Show AI response
-        // -------------------------
+        setConnectionStatus(
+            "Online"
+        );
+
 
         addBotMessage(
             data.reply
@@ -197,10 +395,6 @@ async function sendMessage() {
     }
 
 
-    // -----------------------------
-    // Network error
-    // -----------------------------
-
     catch (error) {
 
         console.error(
@@ -208,21 +402,123 @@ async function sendMessage() {
             error
         );
 
+
+        removeTypingIndicator(
+            typing
+        );
+
+
         addBotMessage(
             "Unable to connect to the chatbot server. Please check your connection."
+        );
+
+
+        setConnectionStatus(
+            "Offline"
         );
     }
 
 
-    // -----------------------------
-    // Enable button
-    // -----------------------------
-
     finally {
 
-        sendButton.disabled = false;
+        setLoading(false);
 
         messageInput.focus();
+    }
+}
+
+
+// =================================
+// LOADING STATE
+// =================================
+
+function setLoading(isLoading) {
+
+    sendButton.disabled =
+        isLoading;
+
+    if (isLoading) {
+
+        sendButton.classList.add(
+            "loading"
+        );
+
+    } else {
+
+        sendButton.classList.remove(
+            "loading"
+        );
+    }
+}
+
+
+// =================================
+// TYPING INDICATOR
+// =================================
+
+function addTypingIndicator() {
+
+    const wrapper =
+        document.createElement(
+            "div"
+        );
+
+    wrapper.className =
+        "message bot typing-message";
+
+
+    const box =
+        document.createElement(
+            "div"
+        );
+
+    box.className =
+        "typing-box";
+
+
+    box.innerHTML = `
+        <span class="typing-label">
+            THARUN AI
+        </span>
+
+        <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `;
+
+
+    wrapper.appendChild(
+        box
+    );
+
+    chatBox.appendChild(
+        wrapper
+    );
+
+
+    scrollChatToBottom();
+
+
+    return wrapper;
+}
+
+
+// =================================
+// REMOVE TYPING
+// =================================
+
+function removeTypingIndicator(
+    element
+) {
+
+    if (
+        element &&
+        element.parentNode
+    ) {
+
+        element.remove();
     }
 }
 
@@ -231,7 +527,9 @@ async function sendMessage() {
 // USER MESSAGE
 // =================================
 
-function addUserMessage(message) {
+function addUserMessage(
+    message
+) {
 
     const messageDiv =
         document.createElement(
@@ -269,7 +567,9 @@ function addUserMessage(message) {
 // BOT MESSAGE
 // =================================
 
-function addBotMessage(message) {
+function addBotMessage(
+    message
+) {
 
     const messageDiv =
         document.createElement(
@@ -304,11 +604,52 @@ function addBotMessage(message) {
 
 
 // =================================
+// CONNECTION STATUS
+// =================================
+
+function setConnectionStatus(
+    status
+) {
+
+    if (statusText) {
+
+        statusText.textContent =
+            status;
+    }
+}
+
+
+// =================================
 // SCROLL
 // =================================
 
 function scrollChatToBottom() {
 
-    chatBox.scrollTop =
-        chatBox.scrollHeight;
+    requestAnimationFrame(
+        () => {
+
+            chatBox.scrollTo({
+                top:
+                    chatBox.scrollHeight,
+
+                behavior:
+                    "smooth"
+            });
+
+        }
+    );
 }
+
+
+// =================================
+// INITIAL FOCUS
+// =================================
+
+window.addEventListener(
+    "load",
+    function () {
+
+        messageInput.focus();
+
+    }
+);

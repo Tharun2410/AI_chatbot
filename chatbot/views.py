@@ -9,50 +9,40 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 def home(request):
-    return render(request, 'chatbot/index.html')
+    return render(request, "chatbot/index.html")
 
 
 def chat(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            message = data.get("message")
+    if request.method != "POST":
+        return JsonResponse({
+            "error": "Only POST requests are allowed."
+        }, status=405)
 
-            print("User message:", message)
+    try:
+        data = json.loads(request.body)
+        message = data.get("message", "").strip()
 
-            conversation = request.session.get("conversation", [])
-
-            conversation.append({
-                "role": "user",
-                "text": message
-            })
-
-            prompt = ""
-
-            for item in conversation:
-                prompt += f"{item['role']}: {item['text']}\n"
-
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt
-            )
-
-            reply = response.text
-
-            conversation.append({
-                "role": "assistant",
-                "text": reply
-            })
-
-            request.session["conversation"] = conversation
-
+        if not message:
             return JsonResponse({
-                "reply": reply
-            })
+                "error": "Please enter a message."
+            }, status=400)
 
-        except Exception as e:
-            print("CHAT ERROR:", repr(e))
+        print("User message:", message)
 
-            return JsonResponse({
-                "error": "AI service is temporarily unavailable. Please try again later."
-            }, status=503)
+        response = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=message
+        )
+
+        reply = response.text
+
+        return JsonResponse({
+            "reply": reply
+        })
+        
+    except Exception as e:
+        print("CHAT ERROR:", repr(e))
+
+        return JsonResponse({
+            "error": "AI service is temporarily unavailable. Please try again later."
+        }, status=503)

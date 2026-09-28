@@ -1,3 +1,17 @@
+from django.shortcuts import render
+from django.http import JsonResponse
+import json
+import os
+from google import genai
+
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+
+def home(request):
+    return render(request, 'chatbot/index.html')
+
+
 def chat(request):
     if request.method == "POST":
         try:

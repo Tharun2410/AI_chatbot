@@ -1,655 +1,163 @@
-const messageInput =
-    document.getElementById("message");
+/* BRO chat — robust version: one delegated click handler, null-safe, shows real errors */
+document.addEventListener("DOMContentLoaded", function () {
+    console.log("BRO script loaded");
 
-const sendButton =
-    document.getElementById("send-button");
+    const $ = (id) => document.getElementById(id);
+    const messageInput = $("message");
+    const sendButton = $("send-button");
+    const chatBox = $("chat-box");
+    const welcomeScreen = $("welcome-screen");
+    const menuDropdown = $("menu-dropdown");
+    const statusText = $("connection-status");
 
-const chatBox =
-    document.getElementById("chat-box");
-
-const welcomeScreen =
-    document.getElementById("welcome-screen");
-
-const newChatButton =
-    document.getElementById("new-chat-button");
-
-const menuButton =
-    document.getElementById("menu-button");
-
-const menuDropdown =
-    document.getElementById("menu-dropdown");
-
-const clearChatButton =
-    document.getElementById("clear-chat");
-
-const focusInputButton =
-    document.getElementById("focus-input");
-
-const statusText =
-    document.getElementById("connection-status");
-
-
-// =================================
-// SEND BUTTON
-// =================================
-
-sendButton.addEventListener(
-    "click",
-    sendMessage
-);
-
-
-// =================================
-// ENTER KEY
-// =================================
-
-messageInput.addEventListener(
-    "keydown",
-    function (event) {
-
-        if (
-            event.key === "Enter" &&
-            !event.shiftKey
-        ) {
-
-            event.preventDefault();
-
-            sendMessage();
-        }
+    if (!messageInput || !sendButton || !chatBox) {
+        console.error("BRO: missing #message, #send-button or #chat-box in the HTML. Use the new index.html.");
+        return;
     }
-);
 
+    /* ---------- helpers ---------- */
+    function closeMenu() { if (menuDropdown) menuDropdown.classList.remove("show"); }
+    function setStatus(t) { if (statusText) statusText.textContent = t; }
+    function scrollDown() {
+        requestAnimationFrame(() => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: "smooth" }));
+    }
+    function addMessage(role, text) {
+        const div = document.createElement("div");
+        div.className = "message " + role;
+        const p = document.createElement("p");
+        p.textContent = text;
+        div.appendChild(p);
+        chatBox.appendChild(div);
+        scrollDown();
+    }
+    function addTyping() {
+        const w = document.createElement("div");
+        w.className = "message bot typing-message";
+        w.innerHTML = '<div class="typing-box"><span class="typing-label">BRO</span><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+        chatBox.appendChild(w);
+        scrollDown();
+        return w;
+    }
+    function setLoading(on) {
+        sendButton.disabled = on;
+        sendButton.classList.toggle("loading", on);
+    }
+    function resetChat() {
+        chatBox.querySelectorAll(".message").forEach((m) => m.remove());
+        if (welcomeScreen) welcomeScreen.style.display = "block";
+        closeMenu();
+        messageInput.focus();
+    }
 
-// =================================
-// SUGGESTION CARDS
-// =================================
+    /* ---------- send message to Django ---------- */
+    async function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message || sendButton.disabled) return;
 
-document
-    .querySelectorAll(".suggestion-card")
-    .forEach(button => {
+        const csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+        if (!csrf) {
+            addMessage("bot", "Security token not found. Please refresh the page.");
+            return;
+        }
 
-        button.addEventListener(
-            "click",
-            function () {
-
-                const prompt =
-                    this.dataset.prompt;
-
-                messageInput.value =
-                    prompt;
-
-                sendMessage();
-            }
-        );
-
-    });
-
-
-// =================================
-// RECENT CHAT BUTTONS
-// =================================
-
-document
-    .querySelectorAll(".history-item")
-    .forEach(button => {
-
-        button.addEventListener(
-            "click",
-            function () {
-
-                const prompt =
-                    this.dataset.prompt;
-
-                messageInput.value =
-                    prompt;
-
-                messageInput.focus();
-            }
-        );
-
-    });
-
-
-// =================================
-// NEW CHAT
-// =================================
-
-newChatButton.addEventListener(
-    "click",
-    function () {
-
-        const messages =
-            chatBox.querySelectorAll(
-                ".message"
-            );
-
-        messages.forEach(
-            message => message.remove()
-        );
-
-        welcomeScreen.style.display =
-            "block";
-
+        if (welcomeScreen) welcomeScreen.style.display = "none";
+        addMessage("user", message);
         messageInput.value = "";
-
-        messageInput.focus();
-
-        closeMenu();
-    }
-);
-
-
-// =================================
-// MENU
-// =================================
-
-menuButton.addEventListener(
-    "click",
-    function (event) {
-
-        event.stopPropagation();
-
-        menuDropdown.classList.toggle(
-            "show"
-        );
-    }
-);
-
-
-document.addEventListener(
-    "click",
-    function (event) {
-
-        if (
-            !menuDropdown.contains(event.target) &&
-            event.target !== menuButton
-        ) {
-
-            closeMenu();
-        }
-    }
-);
-
-
-function closeMenu() {
-
-    menuDropdown.classList.remove(
-        "show"
-    );
-}
-
-
-// =================================
-// CLEAR CHAT
-// =================================
-
-clearChatButton.addEventListener(
-    "click",
-    function () {
-
-        const messages =
-            chatBox.querySelectorAll(
-                ".message"
-            );
-
-        messages.forEach(
-            message => message.remove()
-        );
-
-        welcomeScreen.style.display =
-            "block";
-
-        closeMenu();
-
-        messageInput.focus();
-    }
-);
-
-
-// =================================
-// FOCUS INPUT
-// =================================
-
-focusInputButton.addEventListener(
-    "click",
-    function () {
-
-        messageInput.focus();
-
-        closeMenu();
-    }
-);
-
-
-// =================================
-// SEND MESSAGE
-// =================================
-
-async function sendMessage() {
-
-    const message =
-        messageInput.value.trim();
-
-    if (
-        !message ||
-        sendButton.disabled
-    ) {
-        return;
-    }
-
-
-    const csrfElement =
-        document.querySelector(
-            '[name=csrfmiddlewaretoken]'
-        );
-
-
-    if (!csrfElement) {
-
-        addBotMessage(
-            "Security token not found. Please refresh the page."
-        );
-
-        return;
-    }
-
-
-    const csrfToken =
-        csrfElement.value;
-
-
-    // Remove welcome screen
-    // after first message.
-
-    if (welcomeScreen) {
-
-        welcomeScreen.style.display =
-            "none";
-    }
-
-
-    // Show user message
-
-    addUserMessage(
-        message
-    );
-
-
-    messageInput.value = "";
-
-    setLoading(true);
-
-
-    // Show typing indicator
-
-    const typing =
-        addTypingIndicator();
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/chat/",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-
-                        "X-CSRFToken":
-                            csrfToken
-                    },
-
-                    body:
-                        JSON.stringify({
-                            message:
-                                message
-                        })
-                }
-            );
-
-
-        const responseText =
-            await response.text();
-
-
-        console.log(
-            "Chat API status:",
-            response.status
-        );
-
-
-        let data;
-
+        setLoading(true);
+        const typing = addTyping();
 
         try {
-
-            data =
-                JSON.parse(
-                    responseText
-                );
-
-        } catch (error) {
-
-            console.error(
-                "Invalid JSON:",
-                error
-            );
-
-            removeTypingIndicator(
-                typing
-            );
-
-            addBotMessage(
-                "The server returned an invalid response. Please try again."
-            );
-
-            return;
-        }
-
-
-        removeTypingIndicator(
-            typing
-        );
-
-
-        if (!response.ok) {
-
-            addBotMessage(
-                data.error ||
-                "The AI service is temporarily unavailable."
-            );
-
-            setConnectionStatus(
-                "Busy"
-            );
-
-            return;
-        }
-
-
-        if (
-            !data.reply ||
-            !data.reply.trim()
-        ) {
-
-            addBotMessage(
-                "The AI returned an empty response. Please try again."
-            );
-
-            return;
-        }
-
-
-        setConnectionStatus(
-            "Online"
-        );
-
-
-        addBotMessage(
-            data.reply
-        );
-
-    }
-
-
-    catch (error) {
-
-        console.error(
-            "Chat request failed:",
-            error
-        );
-
-
-        removeTypingIndicator(
-            typing
-        );
-
-
-        addBotMessage(
-            "Unable to connect to the chatbot server. Please check your connection."
-        );
-
-
-        setConnectionStatus(
-            "Offline"
-        );
-    }
-
-
-    finally {
-
-        setLoading(false);
-
-        messageInput.focus();
-    }
-}
-
-
-// =================================
-// LOADING STATE
-// =================================
-
-function setLoading(isLoading) {
-
-    sendButton.disabled =
-        isLoading;
-
-    if (isLoading) {
-
-        sendButton.classList.add(
-            "loading"
-        );
-
-    } else {
-
-        sendButton.classList.remove(
-            "loading"
-        );
-    }
-}
-
-
-// =================================
-// TYPING INDICATOR
-// =================================
-
-function addTypingIndicator() {
-
-    const wrapper =
-        document.createElement(
-            "div"
-        );
-
-    wrapper.className =
-        "message bot typing-message";
-
-
-    const box =
-        document.createElement(
-            "div"
-        );
-
-    box.className =
-        "typing-box";
-
-
-    box.innerHTML = `
-        <span class="typing-label">
-            THARUN AI
-        </span>
-
-        <div class="typing-dots">
-            <span></span>
-            <span></span>
-            <span></span>
-        </div>
-    `;
-
-
-    wrapper.appendChild(
-        box
-    );
-
-    chatBox.appendChild(
-        wrapper
-    );
-
-
-    scrollChatToBottom();
-
-
-    return wrapper;
-}
-
-
-// =================================
-// REMOVE TYPING
-// =================================
-
-function removeTypingIndicator(
-    element
-) {
-
-    if (
-        element &&
-        element.parentNode
-    ) {
-
-        element.remove();
-    }
-}
-
-
-// =================================
-// USER MESSAGE
-// =================================
-
-function addUserMessage(
-    message
-) {
-
-    const messageDiv =
-        document.createElement(
-            "div"
-        );
-
-    messageDiv.className =
-        "message user";
-
-
-    const paragraph =
-        document.createElement(
-            "p"
-        );
-
-    paragraph.textContent =
-        message;
-
-
-    messageDiv.appendChild(
-        paragraph
-    );
-
-
-    chatBox.appendChild(
-        messageDiv
-    );
-
-
-    scrollChatToBottom();
-}
-
-
-// =================================
-// BOT MESSAGE
-// =================================
-
-function addBotMessage(
-    message
-) {
-
-    const messageDiv =
-        document.createElement(
-            "div"
-        );
-
-    messageDiv.className =
-        "message bot";
-
-
-    const paragraph =
-        document.createElement(
-            "p"
-        );
-
-    paragraph.textContent =
-        message;
-
-
-    messageDiv.appendChild(
-        paragraph
-    );
-
-
-    chatBox.appendChild(
-        messageDiv
-    );
-
-
-    scrollChatToBottom();
-}
-
-
-// =================================
-// CONNECTION STATUS
-// =================================
-
-function setConnectionStatus(
-    status
-) {
-
-    if (statusText) {
-
-        statusText.textContent =
-            status;
-    }
-}
-
-
-// =================================
-// SCROLL
-// =================================
-
-function scrollChatToBottom() {
-
-    requestAnimationFrame(
-        () => {
-
-            chatBox.scrollTo({
-                top:
-                    chatBox.scrollHeight,
-
-                behavior:
-                    "smooth"
+            const response = await fetch("/chat/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrf.value },
+                body: JSON.stringify({ message: message }),
             });
+            const raw = await response.text();
+            typing.remove();
 
+            let data = null;
+            try { data = JSON.parse(raw); } catch (e) {}
+
+            if (!response.ok) {
+                addMessage("bot", (data && data.error) || "Server error (HTTP " + response.status + "). Check your Django /chat/ view and terminal.");
+                setStatus("Busy");
+            } else if (!data || !data.reply || !String(data.reply).trim()) {
+                addMessage("bot", "The server replied, but without a 'reply' field. Check your /chat/ view.");
+            } else {
+                setStatus("Online");
+                addMessage("bot", data.reply);
+            }
+        } catch (error) {
+            console.error("Chat request failed:", error);
+            typing.remove();
+            addMessage("bot", "Unable to reach the server. Is Django running?");
+            setStatus("Offline");
+        } finally {
+            setLoading(false);
+            messageInput.focus();
         }
-    );
-}
-
-
-// =================================
-// INITIAL FOCUS
-// =================================
-
-window.addEventListener(
-    "load",
-    function () {
-
-        messageInput.focus();
-
     }
-);
+
+    /* ---------- ONE delegated click handler (works for every button) ---------- */
+    document.addEventListener("click", function (event) {
+        const t = event.target;
+
+        const card = t.closest(".suggestion-card");
+        if (card) { messageInput.value = card.dataset.prompt || ""; sendMessage(); return; }
+
+        const hist = t.closest(".history-item");
+        if (hist) { messageInput.value = hist.dataset.prompt || ""; messageInput.focus(); return; }
+
+        const chip = t.closest(".chip");
+        if (chip) {
+            const prefix = chip.dataset.prefix || "";
+            if (!messageInput.value.startsWith(prefix)) messageInput.value = prefix + messageInput.value;
+            messageInput.focus();
+            return;
+        }
+
+        if (t.closest("#send-button")) { sendMessage(); return; }
+        if (t.closest("#new-chat-button")) { messageInput.value = ""; resetChat(); return; }
+        if (t.closest("#clear-chat")) { resetChat(); return; }
+        if (t.closest("#focus-input")) { messageInput.focus(); closeMenu(); return; }
+
+        if (t.closest("#theme-toggle")) {
+            const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+            document.documentElement.dataset.theme = next;
+            try { localStorage.setItem("bro-theme", next); } catch (e) {}
+            closeMenu();
+            return;
+        }
+
+        if (t.closest("#menu-button")) { menuDropdown && menuDropdown.classList.toggle("show"); return; }
+        if (!t.closest("#menu-dropdown")) closeMenu();
+    });
+
+    /* ---------- keyboard ---------- */
+    messageInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+
+    /* ---------- sidebar search ---------- */
+    const search = $("history-search");
+    if (search) {
+        search.addEventListener("input", function () {
+            const q = search.value.toLowerCase();
+            document.querySelectorAll("#chat-history .history-item").forEach((item) => {
+                item.classList.toggle("hidden", !item.textContent.toLowerCase().includes(q));
+            });
+        });
+    }
+
+    /* ---------- greeting ---------- */
+    const greeting = $("greeting");
+    if (greeting) {
+        const h = new Date().getHours();
+        greeting.textContent = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    }
+
+    messageInput.focus();
+});

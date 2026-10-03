@@ -5,16 +5,32 @@ import json
 import os
 import time
 
-from google import genai
+from dotenv import load_dotenv
+from openai import OpenAI
 
 
 # ==============================
-# GEMINI CLIENT
+# LOAD ENVIRONMENT VARIABLES
 # ==============================
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+load_dotenv()
+
+
+# ==============================
+# OPENROUTER CLIENT
+# ==============================
+
+load_dotenv()
+
+def get_client():
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise Exception("OPENROUTER_API_KEY is missing. Check your .env file.")
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+    )
+
 
 
 # ==============================
@@ -29,104 +45,73 @@ def home(request):
 
 
 # ==============================
-# GEMINI RESPONSE
+# OPENROUTER RESPONSE
 # ==============================
 
 def generate_ai_response(prompt):
 
-    # Model order
-    models = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-3.6-flash",
-    ]
-
     last_error = None
 
-    for model in models:
+    for attempt in range(2):
 
-        # Only retry transient server errors.
-        for attempt in range(2):
+        try:
 
-            try:
+            print(
+                f"Trying OpenRouter "
+                f"(attempt {attempt + 1})"
+            )
+            client = get_client()
+            
+            response = client.chat.completions.create(
+                model="openrouter/free",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+
+            # Make sure OpenRouter returned text
+            if (
+                not response
+                or not response.choices
+                or not response.choices[0].message.content
+            ):
+                raise Exception(
+                    "OpenRouter returned an empty response."
+                )
+
+            reply = response.choices[0].message.content
+
+            print("SUCCESS: OpenRouter")
+
+            return reply.strip()
+
+        except Exception as e:
+
+            last_error = e
+
+            print(
+                "OPENROUTER ERROR:",
+                repr(e)
+            )
+
+            if attempt == 0:
+
                 print(
-                    f"Trying {model} "
-                    f"(attempt {attempt + 1})"
+                    "Retrying after 2 seconds..."
                 )
 
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
+                time.sleep(2)
 
-                # Make sure Gemini actually returned text.
-                if not response or not response.text:
-                    raise Exception(
-                        "Gemini returned an empty response."
-                    )
-
-                print(
-                    f"SUCCESS: {model}"
-                )
-
-                return response.text.strip()
-
-            except Exception as e:
-
-                last_error = e
-                error_text = str(e)
-
-                print(
-                    f"ERROR from {model}: "
-                    f"{repr(e)}"
-                )
-
-                # Retry only temporary errors.
-                temporary_error = any(
-                    code in error_text
-                    for code in [
-                        "503",
-                        "UNAVAILABLE",
-                        "429",
-                        "RESOURCE_EXHAUSTED",
-                        "500",
-                        "502",
-                        "504",
-                    ]
-                )
-
-                if not temporary_error:
-                    # Invalid API key, bad request,
-                    # permission issue, etc.
-                    print(
-                        f"Non-retryable error "
-                        f"from {model}"
-                    )
-
-                    raise
-
-                # Retry once after a short delay.
-                if attempt == 0:
-                    print(
-                        f"Retrying {model} "
-                        f"after 2 seconds..."
-                    )
-
-                    time.sleep(2)
-
-        print(
-            f"{model} failed. "
-            f"Moving to next model."
-        )
-
-    # All models failed.
     print(
-        "ALL GEMINI MODELS FAILED:",
+        "OPENROUTER FAILED:",
         repr(last_error)
     )
 
     raise Exception(
-        "All Gemini models are temporarily unavailable."
+        "OpenRouter service is temporarily unavailable."
     )
 
 
@@ -137,6 +122,7 @@ def generate_ai_response(prompt):
 def chat(request):
 
     if request.method != "POST":
+
         return JsonResponse(
             {
                 "error":
@@ -161,6 +147,7 @@ def chat(request):
         ).strip()
 
         if not message:
+
             return JsonResponse(
                 {
                     "error":
@@ -183,8 +170,6 @@ def chat(request):
             []
         )
 
-        # Keep the conversation size
-        # under control.
         conversation.append(
             {
                 "role": "user",
@@ -192,6 +177,7 @@ def chat(request):
             }
         )
 
+        # Keep last 20 messages
         conversation = conversation[-20:]
 
         # --------------------------
@@ -199,7 +185,7 @@ def chat(request):
         # --------------------------
 
         prompt = """
-You are Tharun AI.
+You are BRO AI.
 
 You are a helpful, friendly,
 clear and intelligent AI assistant.
@@ -241,7 +227,7 @@ Conversation history:
         prompt += "\nAssistant:"
 
         # --------------------------
-        # Call Gemini
+        # Call OpenRouter
         # --------------------------
 
         reply = generate_ai_response(
@@ -292,7 +278,7 @@ Conversation history:
         )
 
     # ------------------------------
-    # Gemini / server error
+    # OpenRouter / server error
     # ------------------------------
 
     except Exception as e:

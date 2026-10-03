@@ -1,380 +1,411 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="BRO - Personal AI Assistant">
+    <title>BRO</title>
+    <script>document.documentElement.dataset.theme = localStorage.getItem("bro-theme") || "light";</script>
+    <style>
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
-    <meta name="theme-color" content="#000000">
-    <meta name="description" content="THARUN AI - Personal AI Assistant">
+/* BRO — soft glass UI. Light by default, black theme via data-theme="dark" */
 
-    <title>THARUN AI</title>
+:root, [data-theme="light"] {
+    --bg: #f4f5f9; --panel: rgba(255,255,255,.7); --card: #fff;
+    --line: rgba(20,24,60,.07); --text: #2b2d33; --soft: #5d6170; --muted: #9a9eac;
+    --accent: #5b4de8; --accent-2: #7b8cff;
+    --shadow: 0 6px 24px rgba(40,50,110,.08), 0 1px 2px rgba(40,50,110,.06);
+    --glow: radial-gradient(500px 280px at 15% 100%, rgba(123,140,255,.18), transparent 70%), radial-gradient(500px 260px at 95% 100%, rgba(120,235,190,.16), transparent 70%);
+    --user: linear-gradient(135deg,#5b4de8,#7b8cff); --user-text: #fff; --hover: rgba(91,77,232,.07);
+}
+[data-theme="dark"] {
+    --bg: #000; --panel: rgba(255,255,255,.04); --card: #0b0b10;
+    --line: rgba(255,255,255,.09); --text: #f3f4f7; --soft: #b4b8c3; --muted: #6c717d;
+    --accent: #9d8cff; --accent-2: #5fd4ff;
+    --shadow: 0 8px 30px rgba(0,0,0,.6);
+    --glow: radial-gradient(500px 280px at 15% 100%, rgba(139,92,246,.25), transparent 70%), radial-gradient(500px 260px at 95% 100%, rgba(59,232,255,.15), transparent 70%);
+    --user: linear-gradient(135deg,#6d3df0,#2f8cf0); --user-text: #fff; --hover: rgba(255,255,255,.06);
+}
 
-    <link rel="stylesheet" href="{% static 'chatbot/style.css' %}">
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; transition: background .3s, color .3s; }
+body::before { content: ""; position: fixed; inset: 0; background: var(--glow); pointer-events: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+::selection { background: rgba(123,140,255,.3); }
+
+.app { position: relative; display: flex; height: 100vh; padding: 16px; gap: 16px; }
+
+/* SIDEBAR */
+.sidebar { width: 272px; flex-shrink: 0; padding: 22px 18px; display: flex; flex-direction: column; background: var(--panel); backdrop-filter: blur(20px); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; margin-bottom: 20px; }
+.brand-icon { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 14px rgba(91,77,232,.4); }
+.brand h2 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+
+.search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); color: var(--muted); }
+.search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text); font: 14px inherit; font-family: inherit; }
+.search kbd { font: 600 10.5px inherit; font-family: inherit; color: var(--accent); background: var(--hover); padding: 3px 7px; border-radius: 7px; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border: none; border-radius: 12px; background: transparent; color: var(--soft); font: 500 15px inherit; font-family: inherit; text-align: left; cursor: pointer; transition: .2s; }
+.nav-item span { width: 18px; text-align: center; color: var(--muted); }
+.nav-item:hover { background: var(--hover); color: var(--text); }
+.nav-item:hover span { color: var(--accent); }
+
+.recent-section { margin-top: 22px; overflow-y: auto; }
+.section-title { margin: 0 0 8px 12px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.chat-history { display: flex; flex-direction: column; gap: 2px; }
+.chat-history button { padding: 11px 12px; border: none; border-radius: 12px; background: transparent; color: var(--soft); text-align: left; font: 14px inherit; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: .2s; }
+.chat-history button:hover { background: var(--hover); color: var(--text); }
+.history-item { display: flex !important; }
+.history-item.hidden { display: none !important; }
+
+.sidebar-bottom { margin-top: auto; padding: 14px 12px 0; border-top: 1px solid var(--line); }
+.status { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12.5px; }
+.status-dot, .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; animation: ping 2.2s infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); } 70%,100% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } }
+.version { display: block; margin-top: 8px; font-size: 11px; color: var(--muted); }
+
+/* MAIN */
+.main { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel); backdrop-filter: blur(20px); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 0; }
+.model-pill { display: inline-flex; align-items: center; gap: 9px; padding: 8px 14px 8px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); font-size: 14.5px; font-weight: 500; }
+.model-pill .online-dot { margin-left: 6px; }
+.model-pill #connection-status { font-size: 12px; color: var(--muted); }
+.pill-orb { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 30% 28%, #fff, transparent 35%), conic-gradient(from 200deg, #7b8cff, #c79bff, #ffc6a8, #7be0ff, #7b8cff); }
+.menu-button { width: 40px; height: 40px; border: none; border-radius: 12px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; transition: .2s; }
+.menu-button:hover { background: var(--hover); color: var(--text); }
+.topbar-actions { position: relative; }
+.menu-dropdown { position: absolute; top: 48px; right: 0; width: 200px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 50px rgba(20,24,60,.18); opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.97); transition: .18s; z-index: 100; }
+.menu-dropdown.show { opacity: 1; visibility: visible; transform: none; }
+.menu-dropdown button { width: 100%; padding: 10px 12px; border: none; border-radius: 10px; background: transparent; color: var(--soft); text-align: left; font: 13.5px inherit; font-family: inherit; cursor: pointer; }
+.menu-dropdown button:hover { background: var(--hover); color: var(--text); }
+
+.chat-area { flex: 1; overflow-y: auto; padding: 30px 12% 20px; }
+.chat-area::-webkit-scrollbar { width: 5px; }
+.chat-area::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
+
+/* WELCOME */
+.welcome { max-width: 760px; margin: 5vh auto 0; text-align: center; animation: rise .8s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+.welcome-icon { width: 96px; height: 96px; margin: 0 auto 30px; border-radius: 50%; animation: float 6s ease-in-out infinite;
+    background: radial-gradient(circle at 32% 26%, rgba(255,255,255,.95), transparent 32%), radial-gradient(circle at 70% 75%, #ffd0b0, transparent 55%), radial-gradient(circle at 40% 60%, #8f9bff, #b79bff 60%, #d6c4ff);
+    box-shadow: 0 24px 60px rgba(123,140,255,.45), inset -8px -10px 24px rgba(91,77,232,.25); }
+@keyframes float { 50% { transform: translateY(-9px); } }
+.welcome h1 { font-size: clamp(30px, 4.4vw, 50px); font-weight: 600; line-height: 1.22; letter-spacing: -.03em; color: var(--text); }
+.welcome h1 em { font-style: normal; background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.suggestions { margin-top: 40px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; text-align: left; }
+.suggestion-card { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 14px; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); color: var(--text); font-family: inherit; text-align: left; cursor: pointer; transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s, border-color .3s; }
+.suggestion-card:hover { transform: translateY(-3px); border-color: rgba(123,140,255,.5); box-shadow: 0 16px 40px rgba(91,77,232,.16); }
+.suggestion-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--hover); color: var(--accent); }
+.suggestion-card strong { display: block; font-size: 14.5px; font-weight: 600; }
+.suggestion-card small { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.suggestion-arrow { color: var(--muted); transition: .25s; }
+.suggestion-card:hover .suggestion-arrow { color: var(--accent); transform: translate(3px,-3px); }
+
+/* MESSAGES */
+.message { display: flex; margin-bottom: 22px; animation: pop .4s cubic-bezier(.2,.9,.3,1.1) both; }
+.message.user { justify-content: flex-end; }
+@keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+.message p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 15px; }
+.message.user p { max-width: 64%; padding: 12px 18px; background: var(--user); color: var(--user-text); border-radius: 20px 20px 6px 20px; box-shadow: 0 10px 26px rgba(91,77,232,.25); }
+.message.bot p { max-width: 80%; padding: 16px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 6px 20px 20px 20px; box-shadow: var(--shadow); }
+.message.bot p::before { content: "✦ BRO"; display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.typing-box { padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 6px 20px 20px 20px; box-shadow: var(--shadow); }
+.typing-label { display: block; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.typing-dots { display: flex; align-items: center; gap: 4px; height: 18px; }
+.typing-dots span { width: 4px; height: 100%; border-radius: 4px; background: linear-gradient(var(--accent), var(--accent-2)); animation: wave 1s ease-in-out infinite; }
+.typing-dots span:nth-child(2) { animation-delay: .15s; } .typing-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes wave { 0%,100% { transform: scaleY(.25); opacity: .5; } 50% { transform: scaleY(1); opacity: 1; } }
+
+/* INPUT CARD */
+.input-area { padding: 8px 12% 18px; }
+.input-wrapper { max-width: 860px; margin: auto; padding: 14px 14px 12px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); transition: box-shadow .3s, border-color .3s; }
+.input-wrapper:focus-within { border-color: rgba(123,140,255,.55); box-shadow: 0 0 0 4px rgba(123,140,255,.14), 0 18px 50px rgba(91,77,232,.14); }
+.input-row { display: flex; align-items: center; gap: 12px; }
+.input-spark { color: var(--accent); font-size: 17px; }
+#message { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text); font: 15.5px inherit; font-family: inherit; padding: 12px 0; }
+#message::placeholder { color: var(--muted); }
+#send-button { position: relative; width: 44px; height: 44px; border: none; border-radius: 14px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-size: 16px; cursor: pointer; box-shadow: 0 8px 20px rgba(91,77,232,.35); transition: .2s; }
+#send-button:hover:not(:disabled) { transform: translateY(-2px) scale(1.05); }
+#send-button:active:not(:disabled) { transform: scale(.94); }
+#send-button:disabled { opacity: .5; cursor: progress; }
+.send-icon { display: block; transition: opacity .2s; } #send-button.loading .send-icon { opacity: 0; }
+.send-loader { position: absolute; top: 50%; left: 50%; margin: -8px 0 0 -8px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; opacity: 0; animation: spin .7s linear infinite; }
+#send-button.loading .send-loader { opacity: 1; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chip { padding: 8px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--card); color: var(--soft); font: 500 13px inherit; font-family: inherit; box-shadow: var(--shadow); cursor: pointer; transition: .2s; }
+.chip:hover { color: var(--accent); border-color: rgba(123,140,255,.5); transform: translateY(-1px); }
+.disclaimer { margin-top: 10px; text-align: center; font-size: 11.5px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } }
+@media (max-width: 800px) {
+    .app { padding: 0; gap: 0; } .sidebar { display: none; }
+    .main { border-radius: 0; border: none; } .topbar { padding: 14px 16px 0; }
+    .chat-area { padding: 20px 16px; } .input-area { padding: 8px 12px 14px; }
+    .suggestions { grid-template-columns: 1fr; }
+    .message.user p { max-width: 88%; } .message.bot p { max-width: 100%; }
+}
+
+    </style>
 </head>
-
 <body>
-
 <div class="app">
 
-    <!-- =========================
-         SIDEBAR
-    ========================== -->
-
     <aside class="sidebar">
-
         <div class="brand">
-
-            <div class="brand-icon">
-                <span>✦</span>
-            </div>
-
-            <div class="brand-text">
-                <h2>THARUN AI</h2>
-                <span>AI ASSISTANT</span>
-            </div>
-
+            <div class="brand-icon"><span>✦</span></div>
+            <h2>BRO</h2>
         </div>
 
+        <label class="search">
+            <span class="search-icon">⌕</span>
+            <input type="text" id="history-search" placeholder="Search" autocomplete="off">
+            <kbd>⌘K</kbd>
+        </label>
 
-        <button
-            class="new-chat"
-            id="new-chat-button"
-            type="button"
-        >
-            <span class="new-chat-label">
-                New Chat
-            </span>
-
-            <span class="new-chat-icon">
-                ＋
-            </span>
-        </button>
-
+        <nav class="nav">
+            <button type="button" class="nav-item" id="new-chat-button"><span>＋</span>New chat</button>
+            <button type="button" class="nav-item history-item" data-prompt="Suggest something interesting for me to explore"><span>◎</span>Explore</button>
+        </nav>
 
         <div class="recent-section">
-
-            <p class="section-title">
-                RECENT CHATS
-            </p>
-
-            <div
-                class="chat-history"
-                id="chat-history"
-            >
-
-                <button
-                    type="button"
-                    class="history-item"
-                    data-prompt="Help me learn Python"
-                >
-                    <span class="history-icon">◌</span>
-                    <span>Python Help</span>
-                </button>
-
-                <button
-                    type="button"
-                    class="history-item"
-                    data-prompt="Help me with my Django project"
-                >
-                    <span class="history-icon">◌</span>
-                    <span>Django Project</span>
-                </button>
-
-                <button
-                    type="button"
-                    class="history-item"
-                    data-prompt="Help me prepare for my interview"
-                >
-                    <span class="history-icon">◌</span>
-                    <span>Interview Prep</span>
-                </button>
-
+            <p class="section-title">Recent chats</p>
+            <div class="chat-history" id="chat-history">
+                <button type="button" class="history-item" data-prompt="Help me learn Python"><span>Python Help</span></button>
+                <button type="button" class="history-item" data-prompt="Help me with my Django project"><span>Django Project</span></button>
+                <button type="button" class="history-item" data-prompt="Help me prepare for my interview"><span>Interview Prep</span></button>
             </div>
-
         </div>
-
 
         <div class="sidebar-bottom">
-
-            <div class="status">
-
-                <span class="status-dot"></span>
-
-                <span>
-                    AI Online
-                </span>
-
-            </div>
-
-            <span class="version">
-                THARUN AI · v1.0
-            </span>
-
+            <div class="status"><span class="status-dot"></span><span>AI online</span></div>
+            <span class="version">BRO · v1.0</span>
         </div>
-
     </aside>
 
-
-    <!-- =========================
-         MAIN
-    ========================== -->
-
     <main class="main">
-
-        <!-- TOP BAR -->
-
         <header class="topbar">
-
-            <div class="assistant-info">
-
-                <div class="ai-avatar">
-                    <span>✦</span>
-                </div>
-
-                <div>
-
-                    <h3>
-                        THARUN AI
-                    </h3>
-
-                    <p>
-
-                        <span class="online-dot"></span>
-
-                        <span id="connection-status">
-                            Online
-                        </span>
-
-                    </p>
-
-                </div>
-
+            <div class="model-pill">
+                <span class="pill-orb"></span>
+                <span>BRO 1.0</span>
+                <span class="online-dot"></span>
+                <span id="connection-status">Online</span>
             </div>
-
-
             <div class="topbar-actions">
-
-                <button
-                    class="menu-button"
-                    id="menu-button"
-                    type="button"
-                    aria-label="More options"
-                >
-                    ⋮
-                </button>
-
-                <div
-                    class="menu-dropdown"
-                    id="menu-dropdown"
-                >
-
-                    <button
-                        type="button"
-                        id="clear-chat"
-                    >
-                        Clear conversation
-                    </button>
-
-                    <button
-                        type="button"
-                        id="focus-input"
-                    >
-                        Focus input
-                    </button>
-
+                <button class="menu-button" id="menu-button" type="button" aria-label="More options">⋯</button>
+                <div class="menu-dropdown" id="menu-dropdown">
+                    <button type="button" id="theme-toggle">Switch theme</button>
+                    <button type="button" id="clear-chat">Clear conversation</button>
+                    <button type="button" id="focus-input">Focus input</button>
                 </div>
-
             </div>
-
         </header>
 
-
-        <!-- =========================
-             CHAT AREA
-        ========================== -->
-
-        <section
-            id="chat-box"
-            class="chat-area"
-        >
-
-            <!-- WELCOME -->
-
-            <div
-                class="welcome"
-                id="welcome-screen"
-            >
-
-                <div class="welcome-icon">
-
-                    <div class="core-ring ring-one"></div>
-                    <div class="core-ring ring-two"></div>
-
-                    <span>✦</span>
-
-                </div>
-
-
-                <div class="welcome-label">
-                    PERSONAL AI ASSISTANT
-                </div>
-
-
+        <section id="chat-box" class="chat-area">
+            <div class="welcome" id="welcome-screen">
+                <div class="welcome-icon"><span></span></div>
                 <h1>
-                    How can I help you?
+                    <span id="greeting">Good morning</span>, {% if user.is_authenticated %}{{ user.first_name|default:user.username }}{% else %}there{% endif %}
+                    <br>How can I <em>assist you today?</em>
                 </h1>
-
-
-                <p>
-                    Ask me anything. Learn faster,
-                    build smarter and solve problems
-                    with THARUN AI.
-                </p>
-
-
                 <div class="suggestions">
-
-                    <button
-                        type="button"
-                        class="suggestion-card"
-                        data-prompt="Explain Python in simple terms"
-                    >
-                        <span class="suggestion-icon">⌘</span>
-
-                        <span>
-                            <strong>Explain Python</strong>
-                            <small>Learn a concept</small>
-                        </span>
-
-                        <span class="suggestion-arrow">
-                            ↗
-                        </span>
-                    </button>
-
-
-                    <button
-                        type="button"
-                        class="suggestion-card"
-                        data-prompt="Help me with Django"
-                    >
-                        <span class="suggestion-icon">◇</span>
-
-                        <span>
-                            <strong>Help with Django</strong>
-                            <small>Build a project</small>
-                        </span>
-
-                        <span class="suggestion-arrow">
-                            ↗
-                        </span>
-                    </button>
-
-
-                    <button
-                        type="button"
-                        class="suggestion-card"
-                        data-prompt="Give me a coding practice question"
-                    >
-                        <span class="suggestion-icon">⌁</span>
-
-                        <span>
-                            <strong>Practice coding</strong>
-                            <small>Improve your skills</small>
-                        </span>
-
-                        <span class="suggestion-arrow">
-                            ↗
-                        </span>
-                    </button>
-
-
-                    <button
-                        type="button"
-                        class="suggestion-card"
-                        data-prompt="Help me prepare for a software developer interview"
-                    >
-                        <span class="suggestion-icon">◎</span>
-
-                        <span>
-                            <strong>Prepare for interview</strong>
-                            <small>Get job ready</small>
-                        </span>
-
-                        <span class="suggestion-arrow">
-                            ↗
-                        </span>
-                    </button>
-
+                    <button type="button" class="suggestion-card" data-prompt="Explain Python in simple terms"><span class="suggestion-icon">⌘</span><span><strong>Explain Python</strong><small>Learn a concept</small></span><span class="suggestion-arrow">↗</span></button>
+                    <button type="button" class="suggestion-card" data-prompt="Help me with Django"><span class="suggestion-icon">◇</span><span><strong>Help with Django</strong><small>Build a project</small></span><span class="suggestion-arrow">↗</span></button>
+                    <button type="button" class="suggestion-card" data-prompt="Give me a coding practice question"><span class="suggestion-icon">⌁</span><span><strong>Practice coding</strong><small>Improve your skills</small></span><span class="suggestion-arrow">↗</span></button>
+                    <button type="button" class="suggestion-card" data-prompt="Help me prepare for a software developer interview"><span class="suggestion-icon">◎</span><span><strong>Prepare for interview</strong><small>Get job ready</small></span><span class="suggestion-arrow">↗</span></button>
                 </div>
-
             </div>
-
         </section>
 
-
-        <!-- =========================
-             INPUT
-        ========================== -->
-
         <div class="input-area">
-
             <div class="input-wrapper">
-
                 {% csrf_token %}
-
-                <span class="input-prefix">
-                    >
-                </span>
-
-                <input
-                    type="text"
-                    id="message"
-                    placeholder="Ask THARUN AI anything..."
-                    autocomplete="off"
-                    maxlength="4000"
-                >
-
-                <button
-                    id="send-button"
-                    type="button"
-                    aria-label="Send message"
-                >
-                    <span class="send-icon">
-                        ➤
-                    </span>
-
-                    <span class="send-loader"></span>
-
-                </button>
-
+                <div class="input-row">
+                    <span class="input-spark">✦</span>
+                    <input type="text" id="message" placeholder="Ask BRO anything..." autocomplete="off" maxlength="4000">
+                    <button id="send-button" type="button" aria-label="Send message">
+                        <span class="send-icon">➤</span>
+                        <span class="send-loader"></span>
+                    </button>
+                </div>
+                <div class="chips">
+                    <button type="button" class="chip" data-prefix="Think step by step: ">💡 Reasoning</button>
+                    <button type="button" class="chip" data-prefix="Describe an image of: ">✧ Create image</button>
+                    <button type="button" class="chip" data-prefix="Research in depth: ">▤ Deep research</button>
+                </div>
             </div>
-
-
-            <div class="input-footer">
-
-                <p class="disclaimer">
-                    THARUN AI can make mistakes.
-                    Check important information.
-                </p>
-
-                <span class="keyboard-hint">
-                    ENTER ↵
-                </span>
-
-            </div>
-
+            <p class="disclaimer">BRO can make mistakes. Check important information.</p>
         </div>
-
     </main>
-
 </div>
+<script>
+/* BRO chat — robust version: one delegated click handler, null-safe, shows real errors */
+document.addEventListener("DOMContentLoaded", function () {
+    console.log("BRO script loaded");
 
+    const $ = (id) => document.getElementById(id);
+    const messageInput = $("message");
+    const sendButton = $("send-button");
+    const chatBox = $("chat-box");
+    const welcomeScreen = $("welcome-screen");
+    const menuDropdown = $("menu-dropdown");
+    const statusText = $("connection-status");
 
-<script src="{% static 'chatbot/script.js' %}"></script>
+    if (!messageInput || !sendButton || !chatBox) {
+        console.error("BRO: missing #message, #send-button or #chat-box in the HTML. Use the new index.html.");
+        return;
+    }
 
+    /* ---------- helpers ---------- */
+    function closeMenu() { if (menuDropdown) menuDropdown.classList.remove("show"); }
+    function setStatus(t) { if (statusText) statusText.textContent = t; }
+    function scrollDown() {
+        requestAnimationFrame(() => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: "smooth" }));
+    }
+    function addMessage(role, text) {
+        const div = document.createElement("div");
+        div.className = "message " + role;
+        const p = document.createElement("p");
+        p.textContent = text;
+        div.appendChild(p);
+        chatBox.appendChild(div);
+        scrollDown();
+    }
+    function addTyping() {
+        const w = document.createElement("div");
+        w.className = "message bot typing-message";
+        w.innerHTML = '<div class="typing-box"><span class="typing-label">BRO</span><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+        chatBox.appendChild(w);
+        scrollDown();
+        return w;
+    }
+    function setLoading(on) {
+        sendButton.disabled = on;
+        sendButton.classList.toggle("loading", on);
+    }
+    function resetChat() {
+        chatBox.querySelectorAll(".message").forEach((m) => m.remove());
+        if (welcomeScreen) welcomeScreen.style.display = "block";
+        closeMenu();
+        messageInput.focus();
+    }
+
+    /* ---------- send message to Django ---------- */
+    async function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message || sendButton.disabled) return;
+
+        const csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+        if (!csrf) {
+            addMessage("bot", "Security token not found. Please refresh the page.");
+            return;
+        }
+
+        if (welcomeScreen) welcomeScreen.style.display = "none";
+        addMessage("user", message);
+        messageInput.value = "";
+        setLoading(true);
+        const typing = addTyping();
+
+        try {
+            const response = await fetch("/chat/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrf.value },
+                body: JSON.stringify({ message: message }),
+            });
+            const raw = await response.text();
+            typing.remove();
+
+            let data = null;
+            try { data = JSON.parse(raw); } catch (e) {}
+
+            if (!response.ok) {
+                addMessage("bot", (data && data.error) || "Server error (HTTP " + response.status + "). Check your Django /chat/ view and terminal.");
+                setStatus("Busy");
+            } else if (!data || !data.reply || !String(data.reply).trim()) {
+                addMessage("bot", "The server replied, but without a 'reply' field. Check your /chat/ view.");
+            } else {
+                setStatus("Online");
+                addMessage("bot", data.reply);
+            }
+        } catch (error) {
+            console.error("Chat request failed:", error);
+            typing.remove();
+            addMessage("bot", "Unable to reach the server. Is Django running?");
+            setStatus("Offline");
+        } finally {
+            setLoading(false);
+            messageInput.focus();
+        }
+    }
+
+    /* ---------- ONE delegated click handler (works for every button) ---------- */
+    document.addEventListener("click", function (event) {
+        const t = event.target;
+
+        const card = t.closest(".suggestion-card");
+        if (card) { messageInput.value = card.dataset.prompt || ""; sendMessage(); return; }
+
+        const hist = t.closest(".history-item");
+        if (hist) { messageInput.value = hist.dataset.prompt || ""; messageInput.focus(); return; }
+
+        const chip = t.closest(".chip");
+        if (chip) {
+            const prefix = chip.dataset.prefix || "";
+            if (!messageInput.value.startsWith(prefix)) messageInput.value = prefix + messageInput.value;
+            messageInput.focus();
+            return;
+        }
+
+        if (t.closest("#send-button")) { sendMessage(); return; }
+        if (t.closest("#new-chat-button")) { messageInput.value = ""; resetChat(); return; }
+        if (t.closest("#clear-chat")) { resetChat(); return; }
+        if (t.closest("#focus-input")) { messageInput.focus(); closeMenu(); return; }
+
+        if (t.closest("#theme-toggle")) {
+            const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+            document.documentElement.dataset.theme = next;
+            try { localStorage.setItem("bro-theme", next); } catch (e) {}
+            closeMenu();
+            return;
+        }
+
+        if (t.closest("#menu-button")) { menuDropdown && menuDropdown.classList.toggle("show"); return; }
+        if (!t.closest("#menu-dropdown")) closeMenu();
+    });
+
+    /* ---------- keyboard ---------- */
+    messageInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+
+    /* ---------- sidebar search ---------- */
+    const search = $("history-search");
+    if (search) {
+        search.addEventListener("input", function () {
+            const q = search.value.toLowerCase();
+            document.querySelectorAll("#chat-history .history-item").forEach((item) => {
+                item.classList.toggle("hidden", !item.textContent.toLowerCase().includes(q));
+            });
+        });
+    }
+
+    /* ---------- greeting ---------- */
+    const greeting = $("greeting");
+    if (greeting) {
+        const h = new Date().getHours();
+        greeting.textContent = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    }
+
+    messageInput.focus();
+});
+
+</script>
 </body>
-
 </html>

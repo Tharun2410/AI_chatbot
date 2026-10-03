@@ -1,7 +1,10 @@
 import json
 import os
+import random
+import re
 import time
 import traceback
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 
@@ -221,6 +224,75 @@ def generate_ai_response(messages):
     raise Exception(f"All models failed: {last_error}")
 
 
+# --------------------------------------------------------------------------
+# Image / video requests
+# --------------------------------------------------------------------------
+# Text models can only write text. For "generate an image/video" messages we
+# skip them and call a real generator instead.
+IMAGE_WORDS = r"(image|picture|photo|drawing|illustration|logo|wallpaper|poster|painting|sketch|artwork)"
+VIDEO_WORDS = r"(video|animation|animated clip|clip|gif|movie)"
+MAKE_WORDS = r"(generate|create|make|draw|design|produce|render|show me|give me|paint)"
+
+VIDEO_UNAVAILABLE_MSG = (
+    "I can't generate videos yet. The text models this chatbot uses can't "
+    "create video, and there are no free video-generation models available. "
+    "I can still write a detailed scene description or prompt for you to use "
+    "in a video tool, or generate an image of the scene instead. "
+    "Just ask!"
+)
+
+
+# Messages about building software that merely mention "video"/"image" are not
+# generation requests ("make a video editor in python").
+NOT_MEDIA_WORDS = r"\b(editor|player|app|application|software|code|script|tool|program|website|function|python|java|javascript|library|plugin|format|size|resolution|compress|convert)\b"
+
+
+def detect_media_request(message):
+    """Return 'image', 'video' or None."""
+    text = message.lower()
+    if re.search(NOT_MEDIA_WORDS, text):
+        return None
+    if re.search(MAKE_WORDS + r"\s+(me\s+)?(an?\s+|the\s+)?([\w-]+\s+){0,3}" + VIDEO_WORDS + r"\b", text):
+        return "video"
+    if re.search(MAKE_WORDS + r"\s+(me\s+)?(an?\s+|the\s+)?([\w-]+\s+){0,3}" + IMAGE_WORDS + r"\b", text):
+        return "image"
+    return None
+
+
+def clean_image_prompt(message):
+    """Strip 'generate an image of ...' but keep the subject (and words like 'logo')."""
+    text = message.strip()
+    cleaned = re.sub(
+        r"^(please\s+)?(can you\s+)?" + MAKE_WORDS + r"\s+(me\s+)?(an?\s+|the\s+)?"
+        + IMAGE_WORDS + r"\s+(of|showing|about)\s+",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if cleaned != text:
+        return cleaned.strip() or text
+    # no "image of" phrasing: just drop the leading command word(s)
+    cleaned = re.sub(
+        r"^(please\s+)?(can you\s+)?" + MAKE_WORDS + r"\s+(me\s+)?(an?\s+|the\s+)?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip() or text
+
+
+def build_image_url(prompt):
+    """Free image via Pollinations (Flux). No API key; the browser loads this URL.
+
+    Open the URL in a browser once to confirm it works before relying on it.
+    """
+    seed = random.randint(1, 10**6)
+    return (
+        f"https://image.pollinations.ai/prompt/{quote(prompt)}"
+        f"?model=flux&width=1024&height=1024&nologo=true&seed={seed}"
+    )
+
+
 def chat(request):
     if request.method != "POST":
         return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
@@ -233,6 +305,20 @@ def chat(request):
             return JsonResponse({"error": "Please enter a message."}, status=400)
 
         print("User message:", message)
+
+        # ---- image / video requests skip the text models ----
+        kind = detect_media_request(message)
+        if kind == "video":
+            return JsonResponse({"reply": VIDEO_UNAVAILABLE_MSG})
+        if kind == "image":
+            prompt = clean_image_prompt(message)
+            print("IMAGE REQUEST:", prompt)
+            return JsonResponse(
+                {
+                    "reply": f"Here's your image: {prompt}",
+                    "image_url": build_image_url(prompt),
+                }
+            )
 
         # ---- conversation history (never let a session problem break the chat) ----
         try:

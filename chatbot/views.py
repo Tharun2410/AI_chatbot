@@ -3,12 +3,15 @@ import os
 import time
 import traceback
 
-from django.http import JsonResponse
+import requests
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
+
+OR_BASE = "https://openrouter.ai/api/v1"
 
 SYSTEM_PROMPT = (
     "You are BRO, a helpful, friendly, clear and intelligent AI assistant. "
@@ -17,44 +20,149 @@ SYSTEM_PROMPT = (
     "but don't mention the history unless asked."
 )
 
+# Used only if the live model lookup fails. Free model names change often,
+# so the code normally fetches the current list from OpenRouter instead.
+FALLBACK_TEXT_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "poolside/laguna-s-2.1:free",
+    "google/gemma-4-31b-it:free",
+]
+
+# cache: (list_of_model_ids, timestamp)
+_cache = {"text": ([], 0.0), "video": ([], 0.0)}
+CACHE_SECONDS = 3600
+
+
+# --------------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------------
+def _api_key():
+    key = os.getenv("OPENROUTER_API_KEY")
+    if not key:
+        raise Exception("OPENROUTER_API_KEY is missing. Check your environment variables.")
+    return key
+
+
+def _headers():
+    return {
+        "Authorization": f"Bearer {_api_key()}",
+        "Content-Type": "application/json",
+    }
+
 
 def get_client():
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise Exception("OPENROUTER_API_KEY is missing. Check your .env file.")
-    return OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    # timeout keeps a slow model from running past gunicorn's time limit;
+    # max_retries=0 because we do our own fallback across models.
+    return OpenAI(
+        api_key=_api_key(),
+        base_url=OR_BASE,
+        timeout=20,
+        max_retries=0,
+    )
 
 
+def _all_zero(pricing):
+    """True only if the model has pricing info and every price is 0."""
+    if not isinstance(pricing, dict) or not pricing:
+        return False
+    try:
+        return all(float(v) == 0 for v in pricing.values())
+    except (TypeError, ValueError):
+        return False
+
+
+def get_free_text_models():
+    """Live list of free text-output models (largest context first), cached 1 hour."""
+    models, ts = _cache["text"]
+    if models and time.time() - ts < CACHE_SECONDS:
+        return models
+
+    try:
+        r = requests.get(f"{OR_BASE}/models", timeout=10)
+        r.raise_for_status()
+        found = []
+        for m in r.json().get("data", []):
+            outputs = m.get("architecture", {}).get("output_modalities", ["text"])
+            if (
+                m.get("id", "").endswith(":free")
+                and outputs == ["text"]
+                and _all_zero(m.get("pricing"))
+            ):
+                found.append((m.get("context_length") or 0, m["id"]))
+
+        free = [mid for _, mid in sorted(found, reverse=True)][:6]
+        if free:
+            _cache["text"] = (free, time.time())
+            return free
+    except Exception as e:
+        print("TEXT MODEL LIST ERROR:", repr(e))
+
+    return FALLBACK_TEXT_MODELS
+
+
+def get_free_video_models():
+    """Live list of FREE video-generation models, cached 1 hour.
+
+    As of now OpenRouter has none, so this normally returns an empty list.
+    If a free one appears later, it will be picked up automatically.
+    """
+    models, ts = _cache["video"]
+    if time.time() - ts < CACHE_SECONDS and ts > 0:
+        return models
+
+    try:
+        r = requests.get(f"{OR_BASE}/videos/models", timeout=15)
+        r.raise_for_status()
+        free = [
+            m["id"]
+            for m in r.json().get("data", [])
+            if _all_zero(m.get("pricing"))
+        ]
+        _cache["video"] = (free, time.time())
+        return free
+    except Exception as e:
+        print("VIDEO MODEL LIST ERROR:", repr(e))
+        return []
+
+
+# --------------------------------------------------------------------------
+# Pages
+# --------------------------------------------------------------------------
 def home(request):
     return render(request, "chatbot/index.html")
 
 
+# --------------------------------------------------------------------------
+# Text chat
+# --------------------------------------------------------------------------
 def generate_ai_response(messages):
-    """Call OpenRouter (2 attempts). `messages` is a list of {role, content}."""
+    """Try each free model in turn. `messages` is a list of {role, content}."""
     last_error = None
 
-    for attempt in range(2):
+    for model in get_free_text_models()[:4]:
         try:
-            print(f"Trying OpenRouter (attempt {attempt + 1})")
+            print(f"Trying model: {model}")
             response = get_client().chat.completions.create(
-                model="openrouter/free",
+                model=model,
                 messages=messages,
             )
-            if not response or not response.choices or not response.choices[0].message.content:
-                raise Exception("OpenRouter returned an empty response.")
+            text = (
+                response.choices[0].message.content
+                if response and response.choices
+                else None
+            )
+            if not text:
+                raise Exception("Empty response")
 
-            print("SUCCESS: OpenRouter")
-            return response.choices[0].message.content.strip()
+            print("SUCCESS:", model)
+            return text.strip()
 
         except Exception as e:
             last_error = e
-            print("OPENROUTER ERROR:", repr(e))
-            if attempt == 0:
-                print("Retrying after 2 seconds...")
-                time.sleep(2)
+            print(f"MODEL FAILED ({model}):", repr(e))
 
-    # include the real reason so it shows in the chat while you debug
-    raise Exception(f"OpenRouter failed: {last_error}")
+    raise Exception(f"All models failed: {last_error}")
 
 
 def chat(request):
@@ -102,4 +210,94 @@ def chat(request):
     except Exception as e:
         print("CHAT ERROR:", repr(e))
         traceback.print_exc()
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse(
+            {"error": "The AI is busy right now. Please try again in a moment."},
+            status=503,
+        )
+
+
+def free_models(request):
+    """Debug helper: shows which free models the app is currently using."""
+    return JsonResponse(
+        {
+            "text_models": get_free_text_models(),
+            "video_models": get_free_video_models(),
+        }
+    )
+
+
+# --------------------------------------------------------------------------
+# Video generation (free models only)
+# --------------------------------------------------------------------------
+def video_start(request):
+    """Start a video job. Only ever uses FREE video models."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST requests are allowed."}, status=405)
+
+    try:
+        free_video = get_free_video_models()
+        if not free_video:
+            return JsonResponse(
+                {
+                    "error": (
+                        "No free video generation models are available on "
+                        "OpenRouter right now."
+                    )
+                },
+                status=503,
+            )
+
+        data = json.loads(request.body)
+        prompt = (data.get("prompt") or "").strip()
+        if not prompt:
+            return JsonResponse({"error": "Please enter a prompt."}, status=400)
+
+        model = data.get("model")
+        if model not in free_video:
+            model = free_video[0]
+
+        payload = {"model": model, "prompt": prompt}
+        # Only pass options the chosen model supports (check /api/v1/videos/models).
+        for key in ("duration", "resolution", "aspect_ratio"):
+            if data.get(key):
+                payload[key] = data[key]
+
+        r = requests.post(
+            f"{OR_BASE}/videos", headers=_headers(), json=payload, timeout=30
+        )
+        if not r.ok:
+            print("VIDEO START FAILED:", r.status_code, r.text)
+            return JsonResponse({"error": r.text}, status=r.status_code)
+
+        return JsonResponse(r.json())
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    except Exception as e:
+        print("VIDEO START ERROR:", repr(e))
+        traceback.print_exc()
+        return JsonResponse({"error": "Could not start the video job."}, status=500)
+
+
+def video_status(request, job_id):
+    """The browser polls this every few seconds."""
+    try:
+        r = requests.get(f"{OR_BASE}/videos/{job_id}", headers=_headers(), timeout=20)
+        return JsonResponse(r.json(), status=r.status_code)
+    except Exception as e:
+        print("VIDEO STATUS ERROR:", repr(e))
+        return JsonResponse({"error": "Status check failed."}, status=503)
+
+
+def video_content(request, job_id):
+    """Proxy the finished MP4 so the API key is never exposed to the browser."""
+    try:
+        r = requests.get(
+            f"{OR_BASE}/videos/{job_id}/content?index=0",
+            headers=_headers(),
+            timeout=120,
+        )
+        return HttpResponse(r.content, content_type="video/mp4", status=r.status_code)
+    except Exception as e:
+        print("VIDEO CONTENT ERROR:", repr(e))
+        return JsonResponse({"error": "Could not download the video."}, status=503)

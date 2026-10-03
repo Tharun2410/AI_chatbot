@@ -2,6 +2,8 @@ import json
 import os
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 
 import requests
 from django.http import HttpResponse, JsonResponse
@@ -28,6 +30,31 @@ FALLBACK_TEXT_MODELS = [
     "poolside/laguna-s-2.1:free",
     "google/gemma-4-31b-it:free",
 ]
+
+# Models that worked from a plain API call. Tried first.
+PREFERRED_TEXT_MODELS = [
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+]
+
+# model id -> unix time until which we skip it (failed models get benched)
+_blocked = {}
+
+# One hung model must never freeze the whole request, so each call runs in a
+# thread with a hard deadline. 3 models x 25s stays under gunicorn's timeout.
+_executor = ThreadPoolExecutor(max_workers=8)
+PER_MODEL_DEADLINE = 25
+MAX_MODELS_PER_REQUEST = 3
+
+
+def _block(model, seconds):
+    _blocked[model] = time.time() + seconds
+    print(f"BENCHING {model} for {seconds}s")
+
+
+def _is_blocked(model):
+    return _blocked.get(model, 0) > time.time()
+
 
 # cache: (list_of_model_ids, timestamp)
 _cache = {"text": ([], 0.0), "video": ([], 0.0)}
@@ -91,7 +118,10 @@ def get_free_text_models():
             ):
                 found.append((m.get("context_length") or 0, m["id"]))
 
-        free = [mid for _, mid in sorted(found, reverse=True)][:6]
+        by_context = [mid for _, mid in sorted(found, reverse=True)]
+        preferred = [m for m in PREFERRED_TEXT_MODELS if m in by_context]
+        rest = [m for m in by_context if m not in preferred]
+        free = (preferred + rest)[:8]
         if free:
             _cache["text"] = (free, time.time())
             return free
@@ -136,31 +166,57 @@ def home(request):
 # --------------------------------------------------------------------------
 # Text chat
 # --------------------------------------------------------------------------
+def _call_model(model, messages):
+    response = get_client().chat.completions.create(model=model, messages=messages)
+    text = (
+        response.choices[0].message.content
+        if response and response.choices
+        else None
+    )
+    if not text:
+        raise Exception("Empty response")
+    return text.strip()
+
+
 def generate_ai_response(messages):
-    """Try each free model in turn. `messages` is a list of {role, content}."""
+    """Try free models in turn. `messages` is a list of {role, content}.
+
+    - Each call has a hard deadline, so a hung model can't kill the worker.
+    - Failed models are benched so they aren't retried on every message
+      (e.g. 403 "agentic harness only" models are skipped for 24 hours).
+    """
     last_error = None
 
-    for model in get_free_text_models()[:4]:
+    candidates = [m for m in get_free_text_models() if not _is_blocked(m)]
+    if not candidates:  # everything benched: start fresh rather than fail
+        _blocked.clear()
+        candidates = get_free_text_models()
+
+    for model in candidates[:MAX_MODELS_PER_REQUEST]:
         try:
             print(f"Trying model: {model}")
-            response = get_client().chat.completions.create(
-                model=model,
-                messages=messages,
-            )
-            text = (
-                response.choices[0].message.content
-                if response and response.choices
-                else None
-            )
-            if not text:
-                raise Exception("Empty response")
-
+            future = _executor.submit(_call_model, model, messages)
+            text = future.result(timeout=PER_MODEL_DEADLINE)
             print("SUCCESS:", model)
-            return text.strip()
+            return text
+
+        except FutureTimeout:
+            last_error = Exception(f"{model} timed out")
+            print(f"MODEL TIMEOUT ({model})")
+            _block(model, 900)  # 15 min
 
         except Exception as e:
             last_error = e
             print(f"MODEL FAILED ({model}):", repr(e))
+            status = getattr(e, "status_code", None)
+            if status in (403, 404):
+                _block(model, 86400)   # not usable from an API call
+            elif status == 402:
+                _block(model, 3600)
+            elif status == 429:
+                _block(model, 600)     # rate limited
+            else:
+                _block(model, 300)
 
     raise Exception(f"All models failed: {last_error}")
 
